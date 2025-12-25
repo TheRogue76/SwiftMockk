@@ -6,9 +6,15 @@
 /// ```
 public func any<T>() -> T {
     MatcherRegistry.shared.register(AnyMatcher())
-    // Return a sentinel value
-    // Note: This is unsafe but necessary for the DSL to work
-    return unsafeBitCast(0 as Int, to: T.self)
+    // Return a zero-initialized value
+    // Note: This creates uninitialized memory which is unsafe but necessary for the DSL
+    let size = MemoryLayout<T>.size
+    let alignment = MemoryLayout<T>.alignment
+    let pointer = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: alignment)
+    pointer.initializeMemory(as: UInt8.self, repeating: 0, count: size)
+    let value = pointer.load(as: T.self)
+    pointer.deallocate()
+    return value
 }
 
 /// Matches a specific value using equality
@@ -30,7 +36,14 @@ public func eq<T: Equatable>(_ value: T) -> T {
 /// ```
 public func match<T>(_ predicate: @escaping (T) -> Bool) -> T {
     MatcherRegistry.shared.register(PredicateMatcher(predicate: predicate))
-    return unsafeBitCast(0 as Int, to: T.self)
+    // Return a zero-initialized value
+    let size = MemoryLayout<T>.size
+    let alignment = MemoryLayout<T>.alignment
+    let pointer = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: alignment)
+    pointer.initializeMemory(as: UInt8.self, repeating: 0, count: size)
+    let value = pointer.load(as: T.self)
+    pointer.deallocate()
+    return value
 }
 
 // MARK: - Matcher Implementations

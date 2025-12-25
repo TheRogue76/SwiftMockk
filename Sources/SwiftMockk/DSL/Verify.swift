@@ -38,24 +38,24 @@ public func verify(
     _ block: () async throws -> Any?
 ) async rethrows {
     // Enter verifying mode
-    await RecordingContext.shared.enterMode(.verifying)
+    RecordingContext.shared.enterMode(.verifying)
 
     // Execute the closure - this will capture the call pattern
     _ = try await block()
 
     // Get the captured call pattern
-    guard let pattern = await RecordingContext.shared.getLastCapturedCall() else {
-        await RecordingContext.shared.exitMode()
+    guard let pattern = RecordingContext.shared.getLastCapturedCall() else {
+        RecordingContext.shared.exitMode()
         Issue.record(Comment(rawValue: "No call was captured during verification"))
         return
     }
 
-    await RecordingContext.shared.exitMode()
+    RecordingContext.shared.exitMode()
 
     // Find matching calls from the recorder
     // Note: We need to get the recorder from somewhere - for now use a global approach
     // In practice, the pattern.mockId tells us which mock to check
-    let actualCalls = await CallRecorder.shared(for: pattern.mockId).findMatching(pattern)
+    let actualCalls = CallRecorder.shared(for: pattern.mockId).findMatching(pattern)
 
     // Check if the count matches
     guard times.matches(actualCalls.count) else {
@@ -77,15 +77,15 @@ public func verify(
 public func verifyOrder(_ block: () async throws -> Void) async rethrows {
     var expectedCalls: [MethodCall] = []
 
-    await RecordingContext.shared.enterMode(.verifying)
-    await RecordingContext.shared.setOnCapture { call in
+    RecordingContext.shared.enterMode(.verifying)
+    RecordingContext.shared.setOnCapture { call in
         expectedCalls.append(call)
     }
 
     try await block()
 
-    await RecordingContext.shared.clearOnCapture()
-    await RecordingContext.shared.exitMode()
+    RecordingContext.shared.clearOnCapture()
+    RecordingContext.shared.exitMode()
 
     // Verify the calls appear in order (but not necessarily consecutively)
     // This requires access to all recorded calls

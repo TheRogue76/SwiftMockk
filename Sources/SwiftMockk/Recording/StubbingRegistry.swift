@@ -1,10 +1,13 @@
+import Foundation
+
 /// Registry that stores stubs for mock method calls
-public actor StubbingRegistry {
+public final class StubbingRegistry: @unchecked Sendable {
     /// Shared instance
     public static let shared = StubbingRegistry()
 
     /// Storage for stubs, keyed by mock ID and method name
     private var stubs: [String: [String: [Stub]]] = [:]
+    private let lock = NSLock()
 
     private init() {}
 
@@ -22,6 +25,9 @@ public actor StubbingRegistry {
 
     /// Register a stub for a method call pattern
     public func registerStub(for call: MethodCall, behavior: StubBehavior) {
+        lock.lock()
+        defer { lock.unlock() }
+
         let stub = Stub(pattern: call, behavior: behavior)
         if stubs[call.mockId] == nil {
             stubs[call.mockId] = [:]
@@ -82,6 +88,9 @@ public actor StubbingRegistry {
 
     /// Find a matching stub
     private func findStub(for call: MethodCall) -> Stub? {
+        lock.lock()
+        defer { lock.unlock() }
+
         guard let mockStubs = stubs[call.mockId],
               let methodStubs = mockStubs[call.name] else { return nil }
 
@@ -91,6 +100,8 @@ public actor StubbingRegistry {
 
     /// Clear all stubs
     public func reset() {
+        lock.lock()
+        defer { lock.unlock() }
         stubs.removeAll()
     }
 }

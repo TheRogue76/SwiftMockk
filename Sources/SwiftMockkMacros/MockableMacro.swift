@@ -38,7 +38,7 @@ public struct MockableMacro: PeerMacro {
             }
         ) {
             // Add internal infrastructure
-            DeclSyntax("public let _mockId = UUID().uuidString")
+            DeclSyntax("public let _mockId = Foundation.UUID().uuidString")
             DeclSyntax("public var _recorder: CallRecorder { CallRecorder.shared(for: _mockId) }")
             DeclSyntax("")
             DeclSyntax("public init() {}")
@@ -102,12 +102,33 @@ public struct MockableMacro: PeerMacro {
             let matchers = MatcherRegistry.shared.extractMatchers()
             let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
             let call = MethodCall(mockId: _mockId, name: "\(funcName)", args: \(argsArrayLiteral), matchMode: matchMode)
-            await _recorder.record(call)
+            _recorder.record(call)
+
+            // In stubbing/verifying mode, just return a dummy value
+            let mode = RecordingContext.shared.getCurrentMode()
+            if mode == .stubbing || mode == .verifying {
         """
 
         if hasReturnValue {
-            if isAsync {
+            // Return a zero-initialized dummy value in stubbing/verifying mode
+            methodBody += "\n        let size = MemoryLayout<\(returnType!.trimmedDescription)>.size"
+            methodBody += "\n        let alignment = MemoryLayout<\(returnType!.trimmedDescription)>.alignment"
+            methodBody += "\n        let pointer = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: alignment)"
+            methodBody += "\n        pointer.initializeMemory(as: UInt8.self, repeating: 0, count: size)"
+            methodBody += "\n        let value = pointer.load(as: \(returnType!.trimmedDescription).self)"
+            methodBody += "\n        pointer.deallocate()"
+            methodBody += "\n        return value"
+        } else {
+            methodBody += "\n        return"
+        }
+
+        methodBody += "\n    }"
+
+        if hasReturnValue {
+            if isAsync && isThrowing {
                 methodBody += "\n    return try await StubbingRegistry.shared.getAsyncStub(for: call)"
+            } else if isAsync {
+                methodBody += "\n    return try! await StubbingRegistry.shared.getAsyncStub(for: call)"
             } else if isThrowing {
                 methodBody += "\n    return try StubbingRegistry.shared.getStub(for: call)"
             } else {
