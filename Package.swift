@@ -15,8 +15,7 @@ let package = Package(
         ),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-syntax", from: "510.0.0"),
-        .package(url: "https://github.com/SimplyDanny/SwiftLintPlugins", exact: "0.62.2")
+        .package(url: "https://github.com/apple/swift-syntax", from: "510.0.0")
     ],
     targets: [
         // Macro implementation target
@@ -25,30 +24,26 @@ let package = Package(
             dependencies: [
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax")
-            ],
-            plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+            ]
         ),
 
         // Main library target
         .target(
             name: "SwiftMockk",
-            dependencies: ["SwiftMockkMacros"],
-            plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+            dependencies: ["SwiftMockkMacros"]
         ),
 
         // Test targets
         .testTarget(
             name: "SwiftMockkTests",
-            dependencies: ["SwiftMockk"],
-            plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+            dependencies: ["SwiftMockk"]
         ),
         .testTarget(
             name: "SwiftMockkMacrosTests",
             dependencies: [
                 "SwiftMockkMacros",
                 .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax")
-            ],
-            plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+            ]
         ),
     ]
 )
