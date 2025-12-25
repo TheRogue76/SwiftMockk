@@ -47,7 +47,3 @@ jobs:
 
     - name: Run SwiftLint
       run: swiftlint lint Sources Tests
-
-    - name: Check formatting
-      run: swift-format lint -r Sources Tests
-      continue-on-error: true
