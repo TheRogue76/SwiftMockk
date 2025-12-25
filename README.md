@@ -21,8 +21,8 @@ A Swift mocking library inspired by Kotlin's [mockk](https://mockk.io/), providi
 
 ## Requirements
 
-- Swift 6.2+
-- macOS 10.15+ / iOS 13+
+- Swift 6.0+
+- macOS 12+ / iOS 13+
 
 ## Installation
 
