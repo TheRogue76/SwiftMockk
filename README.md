@@ -210,7 +210,7 @@ SwiftMockk provides flexible argument matching:
 | Feature | Kotlin mockk | SwiftMockk |
 |---------|-------------|------------|
 | Mock creation | `mockk<Service>()` | `@Mockable` + `MockService()` |
-| Stubbing | `every { mock.method() } returns value` | `await every { await mock.method() } await .returns(value)` |
+| Stubbing | `every { mock.method() } returns value` | `await every { await mock.method() }.returns(value)` |
 | Verification | `verify { mock.method() }` | `await verify { await mock.method() }` |
 | Async stubbing | `coEvery { mock.method() } returns value` | Same as stubbing (unified API) |
 | Matchers | `any()`, `eq()`, `match {}` | `any()`, `eq()`, `match {}` |
