@@ -30,7 +30,7 @@ Add SwiftMockk to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/TheRogue76/SwiftMockk", from: "0.2.1")
+    .package(url: "https://github.com/TheRogue76/SwiftMockk", from: "<version>")
 ],
 targets: [
     .testTarget(
