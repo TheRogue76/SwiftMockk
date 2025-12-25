@@ -1,5 +1,10 @@
 # SwiftMockk
 
+[![CI](https://github.com/TheRogue76/SwiftMockk/actions/workflows/ci.yml/badge.svg)](https://github.com/TheRogue76/SwiftMockk/actions/workflows/ci.yml)
+[![Swift Version](https://img.shields.io/badge/Swift-6.0+-orange.svg)](https://swift.org)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20iOS-lightgrey.svg)](https://developer.apple.com)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A Swift mocking library inspired by Kotlin's [mockk](https://mockk.io/), providing elegant mocking capabilities for protocol-based testing.
 
 ## Features

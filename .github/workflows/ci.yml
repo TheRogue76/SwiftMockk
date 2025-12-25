@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Show Swift version
+      run: swift --version
+
+    - name: Build
+      run: swift build -v
+
+    - name: Run tests
+      run: swift test -v
+
+    - name: Test Summary
+      if: always()
+      run: |
+        if [ ${{ job.status }} == 'success' ]; then
+          echo "✅ All tests passed!"
+        else
+          echo "❌ Tests failed"
+          exit 1
+        fi
+
+  lint:
+    name: Swift lint Check
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Install SwiftLint
+      run: brew install swiftlint
+
+    - name: Run SwiftLint
+      run: swiftlint lint Sources Tests

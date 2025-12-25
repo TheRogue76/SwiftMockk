@@ -1,3 +1,4 @@
+// swiftlint:disable force_cast
 // SwiftMockk - A Swift mocking library inspired by Kotlin's mockk
 
 /// Macro that generates a mock implementation for a protocol

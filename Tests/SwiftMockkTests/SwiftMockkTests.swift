@@ -276,14 +276,14 @@ protocol ServiceWithProperties {
     let mock = MockServiceWithProperties()
 
     // Stub property getter
-    try await every { mock.name }.returns("TestName")
+    await every { mock.name }.returns("TestName")
 
     // Get property
     let name = mock.name
 
     // Verify
     #expect(name == "TestName")
-    try await verify { mock.name }
+    await verify { mock.name }
 }
 
 @Test func testPropertySetter() async throws {
@@ -293,14 +293,14 @@ protocol ServiceWithProperties {
     mock.name = "NewName"
 
     // Verify setter was called
-    try await verify { mock.name = "NewName" }
+    await verify { mock.name = "NewName" }
 }
 
 @Test func testReadOnlyProperty() async throws {
     let mock = MockServiceWithProperties()
 
     // Stub read-only property
-    try await every { mock.count }.returns(42)
+    await every { mock.count }.returns(42)
 
     // Get property
     let count = mock.count
@@ -325,7 +325,7 @@ protocol ServiceWithProperties {
 
     // Verify order (non-consecutive)
     try await verifyOrder {
-        try await mock.fetchUser(id: any())
+        let _ = try await mock.fetchUser(id: any())
         try await mock.deleteUser(id: any())
     }
 }
@@ -343,7 +343,7 @@ protocol ServiceWithProperties {
 
     // Verify exact consecutive sequence
     try await verifySequence {
-        try await mock.fetchUser(id: "1")
+        let _ = try await mock.fetchUser(id: "1")
         try await mock.deleteUser(id: "1")
     }
 }
@@ -374,7 +374,7 @@ protocol CalculatorService {
 @Test func testRelaxedMockWithStubbing() async throws {
     let mock = MockCalculatorService(mode: .relaxed)
 
-    try await every { mock.add(a: 1, b: 2) }.returns(100)
+    await every { mock.add(a: 1, b: 2) }.returns(100)
 
     // Stubbed call returns stubbed value
     let stubbed = mock.add(a: 1, b: 2)
