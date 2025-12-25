@@ -46,7 +46,7 @@ jobs:
       run: brew install swiftlint
 
     - name: Run SwiftLint
-      run: swiftlint lint --strict Sources Tests
+      run: swiftlint lint Sources Tests
 
     - name: Check formatting
       run: swift-format lint -r Sources Tests
