@@ -71,10 +71,11 @@ Sources/
 
 ## Key Technical Details
 
-### Swift Concurrency and Actors
+### Swift Concurrency and Thread Safety
 
-- **All DSL functions are async**: `every {}` and `verify {}` are async because they interact with actor-isolated state
-- **Actor usage**: `RecordingContext`, `CallRecorder`, and `StubbingRegistry` use actors for thread safety
+- **All DSL functions are async**: `every {}` and `verify {}` are async for consistency and future extensibility
+- **Synchronous locking**: All registries (`RecordingContext`, `CallRecorder`, `StubbingRegistry`, `MatcherRegistry`) use `NSLock` for thread-safe synchronous access
+- **No actors**: While actors were considered, the implementation uses classes with `@unchecked Sendable` and explicit locking to avoid async context restrictions
 - **Recording mode**: Global `RecordingContext.shared` manages whether we're in normal/stubbing/verifying mode
 
 ### How Mock Generation Works
@@ -104,12 +105,15 @@ public class MockUserService: UserService, Mockable {
 
 ### How Stubbing Works
 
-1. `every { await mock.method(args) }` enters stubbing mode
-2. Executes the closure → triggers mock method
-3. Mock method records call to `RecordingContext.shared`
-4. `every` retrieves captured call and returns `Stubbing` builder
-5. User calls `.returns(value)` on the builder
-6. Stub is registered in `StubbingRegistry.shared` keyed by `(mockId, methodName)`
+1. `every { await mock.method(args) }` enters stubbing mode by calling `RecordingContext.shared.enterMode(.stubbing)`
+2. Executes the closure → triggers the mock method
+3. Mock method checks the mode, sees it's in stubbing mode, and:
+   - Records the call to `RecordingContext.shared`
+   - Returns early with a dummy value (never actually used)
+4. `every` retrieves the captured call from `RecordingContext.shared.getLastCapturedCall()`
+5. `every` exits stubbing mode and returns a `Stubbing` builder object
+6. User calls `.returns(value)` on the builder
+7. Stub is registered in `StubbingRegistry.shared` keyed by `(mockId, methodName)`
 
 ### How Verification Works
 
@@ -132,8 +136,9 @@ public class MockUserService: UserService, Mockable {
 ### Sendable Compliance (Swift 6)
 
 - Use `@unchecked Sendable` for types storing `Any` or closures: `MethodCall`, `StubBehavior`, matchers
-- Use actors for mutable shared state: `RecordingContext`, `StubbingRegistry` (though StubbingRegistry is actually an actor)
-- Use `NSLock` for synchronous access: `MatcherRegistry`, `CallRecorderRegistry`
+- Use `@unchecked Sendable` for registries with manual synchronization: `RecordingContext`, `StubbingRegistry`, `CallRecorder`, `MatcherRegistry`
+- All mutable shared state is protected with `NSLock` for thread-safety
+- This approach avoids the async context restrictions that come with actor isolation
 
 ### Mock ID System
 
@@ -203,14 +208,64 @@ import SwiftSyntaxMacrosTestSupport
 }
 ```
 
+## Architecture Implementation Details
+
+### Concurrency Model
+
+- **CallRecorder**: Uses `NSLock` for thread-safe synchronous recording
+- **RecordingContext**: Uses `NSLock` for mode management
+- **StubbingRegistry**: Uses `NSLock` for stub storage
+- **MatcherRegistry**: Uses `NSLock` for matcher storage
+- All registries are classes marked `@unchecked Sendable` with proper locking
+
+### Generated Mock Method Implementation
+
+Generated mock methods follow this pattern:
+```swift
+public func methodName(args) -> ReturnType {
+    // 1. Extract any registered matchers
+    let matchers = MatcherRegistry.shared.extractMatchers()
+    let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+
+    // 2. Create a MethodCall representing this invocation
+    let call = MethodCall(mockId: _mockId, name: "methodName", args: [args], matchMode: matchMode)
+
+    // 3. Record the call
+    _recorder.record(call)
+
+    // 4. Check recording mode and return early if in stubbing/verifying mode
+    let mode = RecordingContext.shared.getCurrentMode()
+    if mode == .stubbing || mode == .verifying {
+        // Return uninitialized memory - safe because value is never actually used
+        let size = MemoryLayout<ReturnType>.size
+        let alignment = MemoryLayout<ReturnType>.alignment
+        let ptr = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: alignment)
+        defer { ptr.deallocate() }
+        return ptr.load(as: ReturnType.self)
+    }
+
+    // 5. Look up and return stubbed value
+    return try! StubbingRegistry.shared.getStub(for: call)
+}
+```
+
+### Why Mode Checking is Necessary
+
+The mode check is crucial because:
+1. During `every {}` stubbing, we execute the mock method to capture the call pattern
+2. At this point, no stub exists yet - we're defining what the stub should be
+3. Without the mode check, the method would try to look up a non-existent stub and crash
+4. The returned dummy value is never actually used - it's discarded by the `every {}` function
+
 ## Known Limitations
 
 1. **Properties**: Not yet implemented in macro generation
 2. **Generics**: Basic support, but complex generic constraints may not work
 3. **Order verification**: `verifyOrder()` and `verifySequence()` are stubbed but not implemented
-4. **Relaxed mocks**: Not implemented (all methods must be stubbed)
+4. **Relaxed mocks**: Not implemented (all non-stubbed method calls will crash)
 5. **Spies**: Not implemented (cannot call through to real implementations)
 6. **Classes**: Can only mock protocols, not concrete classes
+7. **Some edge cases**: A few integration tests may fail in edge cases with complex throwing/async combinations
 
 ## Debugging Tips
 

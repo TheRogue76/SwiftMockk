@@ -6,8 +6,19 @@
 /// ```
 public func any<T>() -> T {
     MatcherRegistry.shared.register(AnyMatcher())
-    // Return a zero-initialized value
-    // Note: This creates uninitialized memory which is unsafe but necessary for the DSL
+    // Return a safe dummy value for common types
+    if T.self == String.self { return "" as! T }
+    if T.self == Int.self { return 0 as! T }
+    if T.self == Bool.self { return false as! T }
+    if T.self == Double.self { return 0.0 as! T }
+    if T.self == Float.self { return Float(0.0) as! T }
+
+    // For zero-sized types (like Void)
+    if MemoryLayout<T>.size == 0 {
+        return unsafeBitCast((), to: T.self)
+    }
+
+    // For other types, use zero-initialized memory (best effort)
     let size = MemoryLayout<T>.size
     let alignment = MemoryLayout<T>.alignment
     let pointer = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: alignment)
@@ -36,7 +47,19 @@ public func eq<T: Equatable>(_ value: T) -> T {
 /// ```
 public func match<T>(_ predicate: @escaping (T) -> Bool) -> T {
     MatcherRegistry.shared.register(PredicateMatcher(predicate: predicate))
-    // Return a zero-initialized value
+    // Return a safe dummy value for common types
+    if T.self == String.self { return "" as! T }
+    if T.self == Int.self { return 0 as! T }
+    if T.self == Bool.self { return false as! T }
+    if T.self == Double.self { return 0.0 as! T }
+    if T.self == Float.self { return Float(0.0) as! T }
+
+    // For zero-sized types (like Void)
+    if MemoryLayout<T>.size == 0 {
+        return unsafeBitCast((), to: T.self)
+    }
+
+    // For other types, use zero-initialized memory (best effort)
     let size = MemoryLayout<T>.size
     let alignment = MemoryLayout<T>.alignment
     let pointer = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: alignment)

@@ -61,7 +61,7 @@ let testMacros: [String: Macro.Type] = [
                 let matchers = MatcherRegistry.shared.extractMatchers()
                 let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
                 let call = MethodCall(mockId: _mockId, name: "fetchUser", args: [], matchMode: matchMode)
-                await _recorder.record(call)
+                _recorder.record(call)
                 return try! StubbingRegistry.shared.getStub(for: call)
             }
         }
@@ -98,7 +98,7 @@ let testMacros: [String: Macro.Type] = [
                 let matchers = MatcherRegistry.shared.extractMatchers()
                 let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
                 let call = MethodCall(mockId: _mockId, name: "fetchUser", args: [id], matchMode: matchMode)
-                await _recorder.record(call)
+                _recorder.record(call)
                 return try! StubbingRegistry.shared.getStub(for: call)
             }
         }
@@ -133,7 +133,7 @@ let testMacros: [String: Macro.Type] = [
                 let matchers = MatcherRegistry.shared.extractMatchers()
                 let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
                 let call = MethodCall(mockId: _mockId, name: "createUser", args: [name, age, email], matchMode: matchMode)
-                await _recorder.record(call)
+                _recorder.record(call)
                 return try! StubbingRegistry.shared.getStub(for: call)
             }
         }
@@ -168,7 +168,7 @@ let testMacros: [String: Macro.Type] = [
                 let matchers = MatcherRegistry.shared.extractMatchers()
                 let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
                 let call = MethodCall(mockId: _mockId, name: "fetchUser", args: [id], matchMode: matchMode)
-                await _recorder.record(call)
+                _recorder.record(call)
                 return try! StubbingRegistry.shared.getStub(for: call)
             }
         }
@@ -205,8 +205,8 @@ let testMacros: [String: Macro.Type] = [
                 let matchers = MatcherRegistry.shared.extractMatchers()
                 let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
                 let call = MethodCall(mockId: _mockId, name: "fetchUser", args: [id], matchMode: matchMode)
-                await _recorder.record(call)
-                return try await StubbingRegistry.shared.getAsyncStub(for: call)
+                _recorder.record(call)
+                return try! await StubbingRegistry.shared.getAsyncStub(for: call)
             }
         }
         """,
@@ -240,7 +240,7 @@ let testMacros: [String: Macro.Type] = [
                 let matchers = MatcherRegistry.shared.extractMatchers()
                 let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
                 let call = MethodCall(mockId: _mockId, name: "fetchUser", args: [id], matchMode: matchMode)
-                await _recorder.record(call)
+                _recorder.record(call)
                 return try StubbingRegistry.shared.getStub(for: call)
             }
         }
@@ -275,7 +275,7 @@ let testMacros: [String: Macro.Type] = [
                 let matchers = MatcherRegistry.shared.extractMatchers()
                 let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
                 let call = MethodCall(mockId: _mockId, name: "fetchUser", args: [id], matchMode: matchMode)
-                await _recorder.record(call)
+                _recorder.record(call)
                 return try await StubbingRegistry.shared.getAsyncStub(for: call)
             }
         }
@@ -310,7 +310,7 @@ let testMacros: [String: Macro.Type] = [
                 let matchers = MatcherRegistry.shared.extractMatchers()
                 let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
                 let call = MethodCall(mockId: _mockId, name: "deleteUser", args: [id], matchMode: matchMode)
-                await _recorder.record(call)
+                _recorder.record(call)
             }
         }
         """,
@@ -344,7 +344,7 @@ let testMacros: [String: Macro.Type] = [
                 let matchers = MatcherRegistry.shared.extractMatchers()
                 let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
                 let call = MethodCall(mockId: _mockId, name: "deleteUser", args: [id], matchMode: matchMode)
-                await _recorder.record(call)
+                _recorder.record(call)
                 try StubbingRegistry.shared.executeThrowingStub(for: call)
             }
         }
@@ -385,7 +385,7 @@ let testMacros: [String: Macro.Type] = [
                 let matchers = MatcherRegistry.shared.extractMatchers()
                 let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
                 let call = MethodCall(mockId: _mockId, name: "fetchUser", args: [id], matchMode: matchMode)
-                await _recorder.record(call)
+                _recorder.record(call)
                 return try! StubbingRegistry.shared.getStub(for: call)
             }
 
@@ -393,7 +393,7 @@ let testMacros: [String: Macro.Type] = [
                 let matchers = MatcherRegistry.shared.extractMatchers()
                 let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
                 let call = MethodCall(mockId: _mockId, name: "deleteUser", args: [id], matchMode: matchMode)
-                await _recorder.record(call)
+                _recorder.record(call)
                 try StubbingRegistry.shared.executeThrowingStub(for: call)
             }
 
@@ -401,7 +401,7 @@ let testMacros: [String: Macro.Type] = [
                 let matchers = MatcherRegistry.shared.extractMatchers()
                 let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
                 let call = MethodCall(mockId: _mockId, name: "updateUser", args: [user], matchMode: matchMode)
-                await _recorder.record(call)
+                _recorder.record(call)
                 return try await StubbingRegistry.shared.getAsyncStub(for: call)
             }
         }

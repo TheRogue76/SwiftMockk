@@ -6,19 +6,25 @@
 /// ```
 @discardableResult
 public func every(_ block: () async throws -> Any?) async rethrows -> Stubbing {
-    // Enter stubbing mode
-    RecordingContext.shared.enterMode(.stubbing)
+    // Execute the closure in stubbing mode and capture the call within the same scope
+    let call = try await RecordingContext.shared.withMode(.stubbing) {
+        do {
+            _ = try await block()
+        } catch MockError.noStub {
+            // Expected - we're in stubbing mode, no stub exists yet or can't create dummy value
+            // This is fine, we just need the call to be recorded
+        } catch {
+            // Re-throw other errors
+            throw error
+        }
 
-    // Execute the closure - this will trigger the mock method and capture the call
-    _ = try await block()
+        // Get the captured call before exiting the task-local scope
+        guard let capturedCall = RecordingContext.shared.getLastCapturedCall() else {
+            fatalError("No call was captured during stubbing")
+        }
 
-    // Get the captured call
-    guard let call = RecordingContext.shared.getLastCapturedCall() else {
-        RecordingContext.shared.exitMode()
-        fatalError("No call was captured during stubbing")
+        return capturedCall
     }
-
-    RecordingContext.shared.exitMode()
 
     return Stubbing(call: call)
 }

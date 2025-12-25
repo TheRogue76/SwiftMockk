@@ -92,7 +92,9 @@ public final class StubbingRegistry: @unchecked Sendable {
         defer { lock.unlock() }
 
         guard let mockStubs = stubs[call.mockId],
-              let methodStubs = mockStubs[call.name] else { return nil }
+              let methodStubs = mockStubs[call.name] else {
+            return nil
+        }
 
         // Find the first stub whose pattern matches the call
         return methodStubs.first { $0.pattern.matches(call) }

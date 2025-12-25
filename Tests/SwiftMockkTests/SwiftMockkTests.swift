@@ -6,7 +6,7 @@ import Foundation
 
 @Mockable
 protocol UserService {
-    func fetchUser(id: String) async -> User
+    func fetchUser(id: String) async throws -> User
     func deleteUser(id: String) async throws
     func updateUser(_ user: User) async throws -> User
 }
@@ -41,11 +41,10 @@ enum CalculatorError: Error {
     let expectedUser = User(id: "123", name: "Alice")
 
     // Stub the method
-    let stubbing = await every { await mock.fetchUser(id: "123") }
-    stubbing.returns(expectedUser)
+    try await every { try await mock.fetchUser(id: "123") }.returns(expectedUser)
 
     // Call the mock
-    let user = await mock.fetchUser(id: "123")
+    let user = try await mock.fetchUser(id: "123")
 
     // Verify the result
     #expect(user == expectedUser)
@@ -56,14 +55,13 @@ enum CalculatorError: Error {
     let mock = MockUserService()
 
     // Stub
-    let stubbing = await every { await mock.fetchUser(id: "123") }
-    stubbing.returns(User(id: "123", name: "Alice"))
+    try await every { try await mock.fetchUser(id: "123") }.returns(User(id: "123", name: "Alice"))
 
     // Call the method
-    _ = await mock.fetchUser(id: "123")
+    _ = try await mock.fetchUser(id: "123")
 
     // Verify it was called
-    await verify { await mock.fetchUser(id: "123") }
+    try await verify { try await mock.fetchUser(id: "123") }
 }
 
 @Test func testAnyMatcher() async throws {
@@ -72,13 +70,12 @@ enum CalculatorError: Error {
     let defaultUser = User(id: "0", name: "Default")
 
     // Stub with any() matcher
-    let stubbing = await every { await mock.fetchUser(id: any()) }
-    stubbing.returns(defaultUser)
+    try await every { try await mock.fetchUser(id: any()) }.returns(defaultUser)
 
     // Call with different IDs
-    let user1 = await mock.fetchUser(id: "123")
-    let user2 = await mock.fetchUser(id: "456")
-    let user3 = await mock.fetchUser(id: "abc")
+    let user1 = try await mock.fetchUser(id: "123")
+    let user2 = try await mock.fetchUser(id: "456")
+    let user3 = try await mock.fetchUser(id: "abc")
 
     // All should return the default user
     #expect(user1 == defaultUser)
@@ -90,55 +87,51 @@ enum CalculatorError: Error {
     let mock = MockUserService()
 
     // Stub
-    let stubbing = await every { await mock.fetchUser(id: any()) }
-    stubbing.returns(User(id: "0", name: "Default"))
+    try await every { try await mock.fetchUser(id: any()) }.returns(User(id: "0", name: "Default"))
 
     // Call multiple times
-    _ = await mock.fetchUser(id: "123")
-    _ = await mock.fetchUser(id: "456")
-    _ = await mock.fetchUser(id: "789")
+    _ = try await mock.fetchUser(id: "123")
+    _ = try await mock.fetchUser(id: "456")
+    _ = try await mock.fetchUser(id: "789")
 
     // Verify with any matcher
-    await verify(times: .exactly(3)) { await mock.fetchUser(id: any()) }
+    try await verify(times: .exactly(3)) { try await mock.fetchUser(id: any()) }
 }
 
 @Test func testVerificationAtLeast() async throws {
     let mock = MockUserService()
 
-    let stubbing = await every { await mock.fetchUser(id: any()) }
-    stubbing.returns(User(id: "0", name: "Default"))
+    try await every { try await mock.fetchUser(id: any()) }.returns(User(id: "0", name: "Default"))
 
     // Call twice
-    _ = await mock.fetchUser(id: "123")
-    _ = await mock.fetchUser(id: "456")
+    _ = try await mock.fetchUser(id: "123")
+    _ = try await mock.fetchUser(id: "456")
 
     // Verify at least once
-    await verify(times: .atLeast(1)) { await mock.fetchUser(id: any()) }
+    try await verify(times: .atLeast(1)) { try await mock.fetchUser(id: any()) }
 
     // Verify at least twice
-    await verify(times: .atLeast(2)) { await mock.fetchUser(id: any()) }
+    try await verify(times: .atLeast(2)) { try await mock.fetchUser(id: any()) }
 }
 
 @Test func testVerificationExactly() async throws {
     let mock = MockUserService()
 
-    let stubbing = await every { await mock.fetchUser(id: any()) }
-    stubbing.returns(User(id: "0", name: "Default"))
+    try await every { try await mock.fetchUser(id: any()) }.returns(User(id: "0", name: "Default"))
 
     // Call exactly twice
-    _ = await mock.fetchUser(id: "123")
-    _ = await mock.fetchUser(id: "456")
+    _ = try await mock.fetchUser(id: "123")
+    _ = try await mock.fetchUser(id: "456")
 
     // Verify exactly 2
-    await verify(times: .exactly(2)) { await mock.fetchUser(id: any()) }
+    try await verify(times: .exactly(2)) { try await mock.fetchUser(id: any()) }
 }
 
 @Test func testThrowingMethod() async throws {
     let mock = MockUserService()
 
     // Stub to throw an error
-    let stubbing = try await every { try await mock.deleteUser(id: any()) }
-    stubbing.throws(CalculatorError.divisionByZero)
+    try await every { try await mock.deleteUser(id: any()) }.throws(CalculatorError.divisionByZero)
 
     // Verify it throws
     do {
@@ -158,15 +151,13 @@ enum CalculatorError: Error {
     let user2 = User(id: "2", name: "Bob")
 
     // Stub both mocks differently
-    let stubbing1 = await every { await mock1.fetchUser(id: "1") }
-    await stubbing1.returns(user1)
+    try await every { try await mock1.fetchUser(id: "1") }.returns(user1)
 
-    let stubbing2 = await every { await mock2.fetchUser(id: "2") }
-    await stubbing2.returns(user2)
+    try await every { try await mock2.fetchUser(id: "2") }.returns(user2)
 
     // Call both
-    let result1 = await mock1.fetchUser(id: "1")
-    let result2 = await mock2.fetchUser(id: "2")
+    let result1 = try await mock1.fetchUser(id: "1")
+    let result2 = try await mock2.fetchUser(id: "2")
 
     // Verify they return different values
     #expect(result1.name == "Alice")
@@ -179,13 +170,12 @@ enum CalculatorError: Error {
     let longIdUser = User(id: "long", name: "Long ID User")
 
     // Stub with custom matcher - only match IDs longer than 5 characters
-    let stubbing = await every {
-        await mock.fetchUser(id: match { $0.count > 5 })
-    }
-    stubbing.returns(longIdUser)
+    try await every {
+        try await mock.fetchUser(id: match { $0.count > 5 })
+    }.returns(longIdUser)
 
     // Call with long ID
-    let result = await mock.fetchUser(id: "verylongid")
+    let result = try await mock.fetchUser(id: "verylongid")
 
     #expect(result == longIdUser)
 }
@@ -194,8 +184,7 @@ enum CalculatorError: Error {
     let mock = MockSimpleCalculator()
 
     // Stub add method
-    let stubbing = await every { mock.add(a: 2, b: 3) }
-    stubbing.returns(5)
+    await every { mock.add(a: 2, b: 3) }.returns(5)
 
     // Test
     let result = mock.add(a: 2, b: 3)
@@ -209,8 +198,7 @@ enum CalculatorError: Error {
     let mock = MockSimpleCalculator()
 
     // Stub with any() matchers
-    let stubbing = await every { mock.add(a: any(), b: any()) }
-    stubbing.returns(100)
+    await every { mock.add(a: any(), b: any()) }.returns(100)
 
     // All calls return 100
     #expect(mock.add(a: 1, b: 2) == 100)
@@ -222,12 +210,10 @@ enum CalculatorError: Error {
     let mock = MockSimpleCalculator()
 
     // Stub divide to throw when b is 0
-    let stubbing1 = try await every { try mock.divide(a: any(), b: 0) }
-    await stubbing1.throws(CalculatorError.divisionByZero)
+    try await every { try mock.divide(a: any(), b: 0) }.throws(CalculatorError.divisionByZero)
 
     // Stub divide to return result when b is not 0
-    let stubbing2 = try await every { try mock.divide(a: 10, b: 2) }
-    await stubbing2.returns(5)
+    try await every { try mock.divide(a: 10, b: 2) }.returns(5)
 
     // Test success case
     let result = try mock.divide(a: 10, b: 2)
@@ -247,19 +233,18 @@ enum CalculatorError: Error {
 @Test func testVerificationWithDifferentArguments() async throws {
     let mock = MockUserService()
 
-    let stubbing = await every { await mock.fetchUser(id: any()) }
-    stubbing.returns(User(id: "0", name: "Default"))
+    try await every { try await mock.fetchUser(id: any()) }.returns(User(id: "0", name: "Default"))
 
     // Call with different arguments
-    _ = await mock.fetchUser(id: "123")
-    _ = await mock.fetchUser(id: "456")
-    _ = await mock.fetchUser(id: "123") // Duplicate
+    _ = try await mock.fetchUser(id: "123")
+    _ = try await mock.fetchUser(id: "456")
+    _ = try await mock.fetchUser(id: "123") // Duplicate
 
     // Verify specific call
-    await verify { await mock.fetchUser(id: "123") }
+    try await verify { try await mock.fetchUser(id: "123") }
 
     // Verify with any matcher for total count
-    await verify(times: .exactly(3)) { await mock.fetchUser(id: any()) }
+    try await verify(times: .exactly(3)) { try await mock.fetchUser(id: any()) }
 }
 
 @Test func testUpdateUserWithThrows() async throws {
@@ -269,8 +254,7 @@ enum CalculatorError: Error {
     let updatedUser = User(id: "1", name: "Alice Updated")
 
     // Stub update
-    let stubbing = try await every { try await mock.updateUser(any()) }
-    stubbing.returns(updatedUser)
+    try await every { try await mock.updateUser(any()) }.returns(updatedUser)
 
     // Call
     let result = try await mock.updateUser(inputUser)

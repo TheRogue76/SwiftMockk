@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 
 /// Verification modes for checking call counts
 public enum VerificationMode {
@@ -32,25 +33,34 @@ public enum VerificationMode {
 /// ```swift
 /// await verify { await mock.fetchUser(id: "123") }
 /// await verify(times: .exactly(2)) { await mock.fetchUser(id: any()) }
-/// ```
 public func verify(
     times: VerificationMode = .atLeastOnce,
     _ block: () async throws -> Any?
 ) async rethrows {
-    // Enter verifying mode
-    RecordingContext.shared.enterMode(.verifying)
+    // Execute the closure in verifying mode and capture the pattern within the same scope
+    let pattern = try await RecordingContext.shared.withMode(.verifying) {
+        do {
+            _ = try await block()
+        } catch MockError.noStub {
+            // Expected - we're in verifying mode, no stub exists or can't create dummy value
+            // This is fine, we just need the call to be recorded
+        } catch {
+            // Re-throw other errors
+            throw error
+        }
 
-    // Execute the closure - this will capture the call pattern
-    _ = try await block()
+        // Get the captured call pattern before exiting the task-local scope
+        guard let capturedCall = RecordingContext.shared.getLastCapturedCall() else {
+            Issue.record(Comment(rawValue: "No call was captured during verification"))
+            return nil as MethodCall?
+        }
 
-    // Get the captured call pattern
-    guard let pattern = RecordingContext.shared.getLastCapturedCall() else {
-        RecordingContext.shared.exitMode()
-        Issue.record(Comment(rawValue: "No call was captured during verification"))
-        return
+        return capturedCall
     }
 
-    RecordingContext.shared.exitMode()
+    guard let pattern = pattern else {
+        return
+    }
 
     // Find matching calls from the recorder
     // Note: We need to get the recorder from somewhere - for now use a global approach
@@ -75,17 +85,32 @@ public func verify(
 /// }
 /// ```
 public func verifyOrder(_ block: () async throws -> Void) async rethrows {
-    var expectedCalls: [MethodCall] = []
+    final class CallCollector: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _calls: [MethodCall] = []
 
-    RecordingContext.shared.enterMode(.verifying)
-    RecordingContext.shared.setOnCapture { call in
-        expectedCalls.append(call)
+        func append(_ call: MethodCall) {
+            lock.lock()
+            defer { lock.unlock() }
+            _calls.append(call)
+        }
+
+        var calls: [MethodCall] {
+            lock.lock()
+            defer { lock.unlock() }
+            return _calls
+        }
     }
 
-    try await block()
+    let collector = CallCollector()
 
-    RecordingContext.shared.clearOnCapture()
-    RecordingContext.shared.exitMode()
+    try await RecordingContext.shared.withOnCapture({ call in
+        collector.append(call)
+    }) {
+        try await RecordingContext.shared.withMode(.verifying) {
+            try await block()
+        }
+    }
 
     // Verify the calls appear in order (but not necessarily consecutively)
     // This requires access to all recorded calls
