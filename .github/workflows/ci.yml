@@ -18,7 +18,7 @@ jobs:
     - name: Show Swift version
       run: swift --version
 
-    - name: Build
+    - name: Build and validate SwiftLint
       run: swift build -v
 
     - name: Run tests
@@ -33,18 +33,3 @@ jobs:
           echo "❌ Tests failed"
           exit 1
         fi
-
-  lint:
-    name: Swift Format Check
-    runs-on: macos-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Install swift-format
-      run: brew install swift-format
-
-    - name: Check formatting
-      run: swift-format lint -r Sources Tests
-      continue-on-error: true

@@ -1,3 +1,4 @@
+// swiftlint:disable force_cast
 /// Matches any value of the specified type
 ///
 /// Example:
