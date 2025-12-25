@@ -108,14 +108,40 @@ public func verifyOrder(_ block: () async throws -> Void) async rethrows {
         collector.append(call)
     }) {
         try await RecordingContext.shared.withMode(.verifying) {
-            try await block()
+            do {
+                try await block()
+            } catch MockError.noStub {
+                // Expected during verification
+            } catch {
+                throw error
+            }
         }
     }
 
+    let expectedCalls = collector.calls
+    guard !expectedCalls.isEmpty else {
+        return
+    }
+
+    // Get the mock ID from the first expected call
+    let mockId = expectedCalls[0].mockId
+    let allCalls = CallRecorder.shared(for: mockId).getAllCalls()
+
     // Verify the calls appear in order (but not necessarily consecutively)
-    // This requires access to all recorded calls
-    // For MVP, we'll skip this implementation detail
-    Issue.record(Comment(rawValue: "verifyOrder is not yet fully implemented"))
+    var allCallsIndex = 0
+    var expectedIndex = 0
+
+    while expectedIndex < expectedCalls.count && allCallsIndex < allCalls.count {
+        if expectedCalls[expectedIndex].matches(allCalls[allCallsIndex]) {
+            expectedIndex += 1
+        }
+        allCallsIndex += 1
+    }
+
+    if expectedIndex < expectedCalls.count {
+        let message = "Expected calls in order, but call '\(expectedCalls[expectedIndex].name)' was not found in the correct order"
+        Issue.record(Comment(rawValue: message))
+    }
 }
 
 /// Verify exact sequence of calls
@@ -129,8 +155,73 @@ public func verifyOrder(_ block: () async throws -> Void) async rethrows {
 /// }
 /// ```
 public func verifySequence(_ block: () async throws -> Void) async rethrows {
-    // Similar to verifyOrder but checks exact sequence
-    Issue.record(Comment(rawValue: "verifySequence is not yet fully implemented"))
+    final class CallCollector: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _calls: [MethodCall] = []
+
+        func append(_ call: MethodCall) {
+            lock.lock()
+            defer { lock.unlock() }
+            _calls.append(call)
+        }
+
+        var calls: [MethodCall] {
+            lock.lock()
+            defer { lock.unlock() }
+            return _calls
+        }
+    }
+
+    let collector = CallCollector()
+
+    try await RecordingContext.shared.withOnCapture({ call in
+        collector.append(call)
+    }) {
+        try await RecordingContext.shared.withMode(.verifying) {
+            do {
+                try await block()
+            } catch MockError.noStub {
+                // Expected during verification
+            } catch {
+                throw error
+            }
+        }
+    }
+
+    let expectedCalls = collector.calls
+    guard !expectedCalls.isEmpty else {
+        return
+    }
+
+    // Get the mock ID from the first expected call
+    let mockId = expectedCalls[0].mockId
+    let allCalls = CallRecorder.shared(for: mockId).getAllCalls()
+
+    // Find the expected sequence as a consecutive subsequence
+    guard allCalls.count >= expectedCalls.count else {
+        Issue.record(Comment(rawValue: "Expected sequence of \(expectedCalls.count) calls, but only \(allCalls.count) calls were recorded"))
+        return
+    }
+
+    var foundSequence = false
+    for startIndex in 0...(allCalls.count - expectedCalls.count) {
+        var matches = true
+        for i in 0..<expectedCalls.count {
+            if !expectedCalls[i].matches(allCalls[startIndex + i]) {
+                matches = false
+                break
+            }
+        }
+        if matches {
+            foundSequence = true
+            break
+        }
+    }
+
+    if !foundSequence {
+        let expectedNames = expectedCalls.map { $0.name }.joined(separator: ", ")
+        Issue.record(Comment(rawValue: "Expected consecutive sequence of calls [\(expectedNames)], but sequence was not found"))
+    }
 }
 
 // CallRecorder.shared(for:) is defined in CallRecorder.swift

@@ -263,3 +263,124 @@ enum CalculatorError: Error {
     #expect(result.name == "Alice Updated")
     try await verify { try await mock.updateUser(any()) }
 }
+
+// MARK: - Property Tests
+
+@Mockable
+protocol ServiceWithProperties {
+    var name: String { get set }
+    var count: Int { get }
+}
+
+@Test func testPropertyStubbing() async throws {
+    let mock = MockServiceWithProperties()
+
+    // Stub property getter
+    try await every { mock.name }.returns("TestName")
+
+    // Get property
+    let name = mock.name
+
+    // Verify
+    #expect(name == "TestName")
+    try await verify { mock.name }
+}
+
+@Test func testPropertySetter() async throws {
+    let mock = MockServiceWithProperties()
+
+    // Set property
+    mock.name = "NewName"
+
+    // Verify setter was called
+    try await verify { mock.name = "NewName" }
+}
+
+@Test func testReadOnlyProperty() async throws {
+    let mock = MockServiceWithProperties()
+
+    // Stub read-only property
+    try await every { mock.count }.returns(42)
+
+    // Get property
+    let count = mock.count
+
+    // Verify
+    #expect(count == 42)
+}
+
+// MARK: - Order Verification Tests
+
+@Test func testVerifyOrder() async throws {
+    let mock = MockUserService()
+
+    // Stub
+    try await every { try await mock.fetchUser(id: any()) }.returns(User(id: "0", name: "Default"))
+    try await every { try await mock.deleteUser(id: any()) }.returns(())
+
+    // Call in order: fetch, delete, fetch
+    _ = try await mock.fetchUser(id: "1")
+    try await mock.deleteUser(id: "1")
+    _ = try await mock.fetchUser(id: "2")
+
+    // Verify order (non-consecutive)
+    try await verifyOrder {
+        try await mock.fetchUser(id: any())
+        try await mock.deleteUser(id: any())
+    }
+}
+
+@Test func testVerifySequence() async throws {
+    let mock = MockUserService()
+
+    // Stub
+    try await every { try await mock.fetchUser(id: any()) }.returns(User(id: "0", name: "Default"))
+    try await every { try await mock.deleteUser(id: any()) }.returns(())
+
+    // Call in sequence: fetch, delete
+    _ = try await mock.fetchUser(id: "1")
+    try await mock.deleteUser(id: "1")
+
+    // Verify exact consecutive sequence
+    try await verifySequence {
+        try await mock.fetchUser(id: "1")
+        try await mock.deleteUser(id: "1")
+    }
+}
+
+// MARK: - Relaxed Mock Tests
+
+@Mockable
+protocol CalculatorService {
+    func add(a: Int, b: Int) -> Int
+    func getName() -> String
+    func isReady() -> Bool
+}
+
+@Test func testRelaxedMockReturnsDefaults() async throws {
+    let mock = MockCalculatorService(mode: .relaxed)
+
+    // Call without stubbing - should return default values for primitives
+    let result = mock.add(a: 5, b: 10)
+    let name = mock.getName()
+    let ready = mock.isReady()
+
+    // Should return default values
+    #expect(result == 0)  // Default Int
+    #expect(name == "")   // Default String
+    #expect(ready == false)  // Default Bool
+}
+
+@Test func testRelaxedMockWithStubbing() async throws {
+    let mock = MockCalculatorService(mode: .relaxed)
+
+    try await every { mock.add(a: 1, b: 2) }.returns(100)
+
+    // Stubbed call returns stubbed value
+    let stubbed = mock.add(a: 1, b: 2)
+    #expect(stubbed == 100)
+
+    // Unstubbed call returns default value
+    let unstubbed = mock.add(a: 5, b: 10)
+    #expect(unstubbed == 0)
+}

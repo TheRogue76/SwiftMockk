@@ -44,25 +44,43 @@ private func _mockDummyValue<T>() throws -> T {
 }
 
 /// Internal helper that wraps stub lookup with mode checking
-public func _mockGetStub<T>(for call: MethodCall) throws -> T {
+public func _mockGetStub<T>(for call: MethodCall, mockMode: MockMode = .strict) throws -> T {
     let mode = RecordingContext.shared.getCurrentMode()
     if mode == .stubbing || mode == .verifying {
         // Try to create a dummy value for primitive types
         // For complex types, this will throw and be caught by DSL functions
         return try _mockDummyValue()
     }
-    return try StubbingRegistry.shared.getStub(for: call)
+
+    do {
+        return try StubbingRegistry.shared.getStub(for: call)
+    } catch MockError.noStub {
+        // If in relaxed mode, return dummy value instead of throwing
+        if mockMode == .relaxed {
+            return try _mockDummyValue()
+        }
+        throw MockError.noStub(call.name)
+    }
 }
 
 /// Internal helper for async stub lookup
-public func _mockGetAsyncStub<T>(for call: MethodCall) async throws -> T {
+public func _mockGetAsyncStub<T>(for call: MethodCall, mockMode: MockMode = .strict) async throws -> T {
     let mode = RecordingContext.shared.getCurrentMode()
     if mode == .stubbing || mode == .verifying {
         // Try to create a dummy value for primitive types
         // For complex types, this will throw and be caught by DSL functions
         return try _mockDummyValue()
     }
-    return try await StubbingRegistry.shared.getAsyncStub(for: call)
+
+    do {
+        return try await StubbingRegistry.shared.getAsyncStub(for: call)
+    } catch MockError.noStub {
+        // If in relaxed mode, return dummy value instead of throwing
+        if mockMode == .relaxed {
+            return try _mockDummyValue()
+        }
+        throw MockError.noStub(call.name)
+    }
 }
 
 /// Internal helper for void throwing methods

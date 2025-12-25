@@ -18,13 +18,17 @@ public struct MockableMacro: PeerMacro {
         let protocolName = protocolDecl.name.text
         let mockClassName = "Mock\(protocolName)"
 
-        // Extract methods from the protocol
+        // Extract methods and properties from the protocol
         var mockMethods: [DeclSyntax] = []
+        var mockProperties: [DeclSyntax] = []
 
         for member in protocolDecl.memberBlock.members {
             if let funcDecl = member.decl.as(FunctionDeclSyntax.self) {
                 let mockMethod = try generateMockMethod(for: funcDecl)
                 mockMethods.append(mockMethod)
+            } else if let varDecl = member.decl.as(VariableDeclSyntax.self) {
+                let properties = try generateMockProperties(for: varDecl)
+                mockProperties.append(contentsOf: properties)
             }
         }
 
@@ -40,9 +44,15 @@ public struct MockableMacro: PeerMacro {
             // Add internal infrastructure
             DeclSyntax("public let _mockId = UUID().uuidString")
             DeclSyntax("public var _recorder: CallRecorder { CallRecorder.shared(for: _mockId) }")
+            DeclSyntax("public var _mockMode: MockMode = .strict")
             DeclSyntax("")
-            DeclSyntax("public init() {}")
+            DeclSyntax("public init(mode: MockMode = .strict) { _mockMode = mode }")
             DeclSyntax("")
+
+            // Add all mock properties
+            for property in mockProperties {
+                property
+            }
 
             // Add all mock methods
             for method in mockMethods {
@@ -109,16 +119,16 @@ public struct MockableMacro: PeerMacro {
         if hasReturnValue {
             if isAsync && isThrowing {
                 // Async throwing method - can propagate errors normally
-                methodBody += "\n    return try await _mockGetAsyncStub(for: call)"
+                methodBody += "\n    return try await _mockGetAsyncStub(for: call, mockMode: _mockMode)"
             } else if isAsync {
                 // Async non-throwing - just use try! since DSL functions handle errors
-                methodBody += "\n    return try! await _mockGetAsyncStub(for: call)"
+                methodBody += "\n    return try! await _mockGetAsyncStub(for: call, mockMode: _mockMode)"
             } else if isThrowing {
                 // Sync throwing method - can propagate errors normally
-                methodBody += "\n    return try _mockGetStub(for: call)"
+                methodBody += "\n    return try _mockGetStub(for: call, mockMode: _mockMode)"
             } else {
                 // Sync non-throwing - just use try! since DSL functions handle errors
-                methodBody += "\n    return try! _mockGetStub(for: call)"
+                methodBody += "\n    return try! _mockGetStub(for: call, mockMode: _mockMode)"
             }
         } else {
             // Void method
@@ -132,6 +142,91 @@ public struct MockableMacro: PeerMacro {
         let fullMethod = methodSignature + " " + methodBody
 
         return DeclSyntax(stringLiteral: fullMethod)
+    }
+
+    /// Generate mock properties for a protocol variable declaration
+    private static func generateMockProperties(for varDecl: VariableDeclSyntax) throws -> [DeclSyntax] {
+        var properties: [DeclSyntax] = []
+
+        // Check if it's a property (not a static var, etc.)
+        guard !varDecl.modifiers.contains(where: { $0.name.text == "static" }) else {
+            return []
+        }
+
+        for binding in varDecl.bindings {
+            guard let pattern = binding.pattern.as(IdentifierPatternSyntax.self),
+                  let typeAnnotation = binding.typeAnnotation else {
+                continue
+            }
+
+            let propertyName = pattern.identifier.text
+            let propertyType = typeAnnotation.type.trimmedDescription
+
+            // Check if it's get-only or get-set
+            let isGetSet: Bool
+            if let accessor = binding.accessorBlock {
+                // Check for { get set } or { get }
+                if let accessorList = accessor.accessors.as(AccessorDeclListSyntax.self) {
+                    let hasSet = accessorList.contains { $0.accessorSpecifier.text == "set" }
+                    isGetSet = hasSet
+                } else {
+                    // Assume get-set if not specified
+                    isGetSet = true
+                }
+            } else {
+                // If no accessor block, default to get-set
+                isGetSet = true
+            }
+
+            // Generate backing storage
+            let backingVar = DeclSyntax(stringLiteral: "private var _\(propertyName): \(propertyType)?")
+            properties.append(backingVar)
+
+            // Generate the property with getter and optionally setter
+            if isGetSet {
+                let property = DeclSyntax(stringLiteral: """
+                public var \(propertyName): \(propertyType) {
+                    get {
+                        let matchers = MatcherRegistry.shared.extractMatchers()
+                        let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                        let call = MethodCall(mockId: _mockId, name: "get_\(propertyName)", args: [], matchMode: matchMode)
+                        _recorder.record(call)
+                        if let value = _\(propertyName) {
+                            return value
+                        }
+                        return try! _mockGetStub(for: call, mockMode: _mockMode)
+                    }
+                    set {
+                        let matchers = MatcherRegistry.shared.extractMatchers()
+                        let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                        let call = MethodCall(mockId: _mockId, name: "set_\(propertyName)", args: [newValue], matchMode: matchMode)
+                        _recorder.record(call)
+                        _\(propertyName) = newValue
+                    }
+                }
+                """)
+                properties.append(property)
+            } else {
+                // Get-only property
+                let property = DeclSyntax(stringLiteral: """
+                public var \(propertyName): \(propertyType) {
+                    get {
+                        let matchers = MatcherRegistry.shared.extractMatchers()
+                        let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                        let call = MethodCall(mockId: _mockId, name: "get_\(propertyName)", args: [], matchMode: matchMode)
+                        _recorder.record(call)
+                        if let value = _\(propertyName) {
+                            return value
+                        }
+                        return try! _mockGetStub(for: call, mockMode: _mockMode)
+                    }
+                }
+                """)
+                properties.append(property)
+            }
+        }
+
+        return properties
     }
 }
 

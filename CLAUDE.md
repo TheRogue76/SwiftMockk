@@ -131,6 +131,64 @@ public class MockUserService: UserService, Mockable {
 3. When mock method executes, it extracts matchers and attaches them to `MethodCall`
 4. During verification/stubbing lookup, matchers are used instead of exact value comparison
 
+### Property Mocking
+
+Properties in protocols are now fully supported. The macro generates:
+- Backing storage (`_propertyName`) for each property
+- Getter that records calls and looks up stubs
+- Setter (for get/set properties) that records calls and updates backing storage
+
+**Property access is recorded as method calls:**
+- Getter: `get_propertyName`
+- Setter: `set_propertyName`
+
+**Example:**
+```swift
+@Mockable
+protocol Service {
+    var name: String { get set }
+    var count: Int { get }
+}
+
+let mock = MockService()
+await every { mock.name } await .returns("Test")
+await every { mock.count } await .returns(42)
+```
+
+### Order Verification
+
+Two new verification functions:
+
+1. **`verifyOrder`**: Verifies calls appear in the specified order, but not necessarily consecutively
+   - Example: If actual calls are [A, X, B, Y, C], verifying [A, B, C] passes
+
+2. **`verifySequence`**: Verifies calls appear as an exact consecutive sequence
+   - Example: Actual calls must contain [A, B, C] as a consecutive subsequence
+
+**Implementation:**
+- Both functions use a `CallCollector` to capture expected calls during verification mode
+- `verifyOrder` uses a two-pointer algorithm to find calls in order
+- `verifySequence` checks all possible starting positions for the sequence
+
+### Relaxed Mocks
+
+Mocks can now be created in "relaxed" mode where unstubbed methods return default values instead of throwing:
+
+```swift
+let mock = MockService(mode: .relaxed)  // Default is .strict
+```
+
+**How it works:**
+- Each mock has a `_mockMode: MockMode` property
+- Stub lookup helpers check the mode after failing to find a stub
+- In relaxed mode, `_mockDummyValue()` is called to return a default value
+- **Limitation**: Only works for primitive types (Int, String, Bool, etc.)
+
+**Mode is passed to stub helpers:**
+```swift
+return try _mockGetStub(for: call, mockMode: _mockMode)
+```
+
 ## Important Patterns and Conventions
 
 ### Sendable Compliance (Swift 6)
@@ -259,13 +317,11 @@ The mode check is crucial because:
 
 ## Known Limitations
 
-1. **Properties**: Not yet implemented in macro generation
-2. **Generics**: Basic support, but complex generic constraints may not work
-3. **Order verification**: `verifyOrder()` and `verifySequence()` are stubbed but not implemented
-4. **Relaxed mocks**: Not implemented (all non-stubbed method calls will crash)
-5. **Spies**: Not implemented (cannot call through to real implementations)
-6. **Classes**: Can only mock protocols, not concrete classes
-7. **Some edge cases**: A few integration tests may fail in edge cases with complex throwing/async combinations
+1. **Generics**: Basic support, but complex generic constraints may not work
+2. **Relaxed mocks with complex types**: Relaxed mode only works with primitive types (Int, String, Bool, etc.), not complex structs or classes
+3. **Spies**: Not implemented (cannot call through to real implementations)
+4. **Classes**: Can only mock protocols, not concrete classes
+5. **Some edge cases**: A few integration tests may fail in edge cases with complex throwing/async combinations
 
 ## Debugging Tips
 

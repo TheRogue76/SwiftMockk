@@ -10,6 +10,9 @@ A Swift mocking library inspired by Kotlin's [mockk](https://mockk.io/), providi
 - ✅ **Async/await support** - Full support for Swift's async/await patterns
 - ✅ **Type-safe** - Compile-time type checking for all mock interactions
 - ✅ **Verification modes** - `exactly`, `atLeast`, `atMost` call count verification
+- ✅ **Property mocking** - Full support for both get and get/set properties
+- ✅ **Order verification** - Verify calls happened in a specific order with `verifyOrder()` and `verifySequence()`
+- ✅ **Relaxed mocks** - Optional mode that returns default values for unstubbed methods
 
 ## Requirements
 
@@ -175,11 +178,66 @@ Due to Swift's language design and concurrency model, SwiftMockk has some differ
 3. **Protocol-only**: Can only mock protocols, not classes (Swift limitation)
 4. **Explicit await**: Swift requires explicit `await` keywords for async operations
 
+### 7. Property Mocking
+
+```swift
+@Mockable
+protocol ServiceWithProperties {
+    var name: String { get set }
+    var count: Int { get }
+}
+
+@Test func testProperties() async throws {
+    let mock = MockServiceWithProperties()
+
+    // Stub property getter
+    await every { mock.name } await .returns("TestName")
+
+    // Get property
+    let name = mock.name
+    #expect(name == "TestName")
+
+    // Verify property access
+    await verify { mock.name }
+
+    // Set property and verify
+    mock.name = "NewName"
+    await verify { mock.name = "NewName" }
+}
+```
+
+### 8. Order Verification
+
+```swift
+// Verify calls happened in order (not necessarily consecutively)
+await verifyOrder {
+    await mock.login()
+    await mock.fetchData()
+    await mock.logout()
+}
+
+// Verify calls happened in exact consecutive sequence
+await verifySequence {
+    await mock.login()
+    await mock.fetchData()
+}
+```
+
+### 9. Relaxed Mocks
+
+```swift
+// Create a relaxed mock that returns default values for unstubbed methods
+let mock = MockService(mode: .relaxed)
+
+// Unstubbed methods return defaults (0 for Int, "" for String, false for Bool, etc.)
+let count = mock.getCount()  // Returns 0 without stubbing
+let name = mock.getName()    // Returns "" without stubbing
+```
+
 ## Current Limitations
 
-- Order verification (`verifyOrder`, `verifySequence`) not yet implemented
-- Spies and relaxed mocks not yet implemented
-- Property mocking not yet implemented
+- Relaxed mocks only work with primitive types (Int, String, Bool, etc.), not complex structs
+- Spies not yet implemented (cannot call through to real implementations)
 - Only works with protocols (cannot mock concrete classes)
 
 ## License
