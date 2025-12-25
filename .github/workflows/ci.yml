@@ -42,11 +42,9 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Install swift-format
+      run: brew install swift-format
+
     - name: Check formatting
-      run: |
-        if command -v swift-format &> /dev/null; then
-          swift-format lint -r Sources Tests
-        else
-          echo "⚠️ swift-format not installed, skipping format check"
-        fi
+      run: swift-format lint -r Sources Tests
       continue-on-error: true
