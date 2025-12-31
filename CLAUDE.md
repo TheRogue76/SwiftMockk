@@ -260,7 +260,7 @@ public func getUser(id: String) throws(UserError) -> User {
 
 **Limitations:**
 - Requires Swift 6+ language mode
-- Regex-based detection is a workaround for swift-syntax API limitations in version 510.0.0
+- Requires swift-syntax 600.0.0+ for typed throws support (older versions are not supported)
 
 ## Important Patterns and Conventions
 
