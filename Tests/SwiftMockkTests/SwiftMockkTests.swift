@@ -384,3 +384,150 @@ protocol CalculatorService {
     let unstubbed = mock.add(a: 5, b: 10)
     #expect(unstubbed == 0)
 }
+
+// MARK: - Result Type Tests
+
+public enum NetworkError: Error, Equatable {
+    case timeout
+    case serverError
+}
+
+@Mockable
+public protocol NetworkService {
+    func fetch(url: String) -> Result<Data, NetworkError>
+    func upload(data: Data) async -> Result<Void, NetworkError>
+}
+
+@Test func testResultTypeSuccess() async throws {
+    let mock = MockNetworkService()
+    let testData = Data([1, 2, 3, 4])
+
+    await every { mock.fetch(url: any()) }.returnsSuccess(testData, failureType: NetworkError.self)
+
+    let result = mock.fetch(url: "https://example.com")
+    guard case .success(let data) = result else {
+        Issue.record("Expected success")
+        return
+    }
+    #expect(data == testData)
+}
+
+@Test func testResultTypeFailure() async throws {
+    let mock = MockNetworkService()
+
+    await every { mock.fetch(url: any()) }.returnsFailure(NetworkError.timeout, successType: Data.self)
+
+    let result = mock.fetch(url: "https://example.com")
+    guard case .failure(let error) = result else {
+        Issue.record("Expected failure")
+        return
+    }
+    #expect(error == .timeout)
+}
+
+@Test func testResultWithExplicitConstruction() async throws {
+    let mock = MockNetworkService()
+    let testData = Data([1, 2, 3, 4])
+
+    // Existing syntax should still work
+    let success: Result<Data, NetworkError> = .success(testData)
+    await every { mock.fetch(url: "test") }.returns(success)
+
+    let result = mock.fetch(url: "test")
+    guard case .success(let data) = result else {
+        Issue.record("Expected success")
+        return
+    }
+    #expect(data == testData)
+}
+
+@Test func testResultAsyncMethod() async throws {
+    let mock = MockNetworkService()
+    let testData = Data([5, 6, 7, 8])
+
+    await every { await mock.upload(data: any()) }.returnsSuccess((), failureType: NetworkError.self)
+
+    let result = await mock.upload(data: testData)
+    guard case .success = result else {
+        Issue.record("Expected success")
+        return
+    }
+}
+
+// MARK: - Typed Throws Tests
+
+public enum UserError: Error, Equatable {
+    case notFound
+    case invalidId
+    case permissionDenied
+}
+
+@Mockable
+public protocol TypedThrowsService {
+    func getUser(id: String) throws(UserError) -> User
+    func fetchUsers() async throws(UserError) -> [User]
+    func updateUser(_ user: User) throws(UserError)
+}
+
+@Test func testTypedThrowsError() async throws {
+    let mock = MockTypedThrowsService()
+
+    try await every { try mock.getUser(id: any()) }.throws(UserError.notFound)
+
+    do {
+        _ = try mock.getUser(id: "123")
+        Issue.record("Expected UserError.notFound")
+    } catch {
+        #expect(error == .notFound)
+    }
+}
+
+@Test func testTypedThrowsSuccess() async throws {
+    let mock = MockTypedThrowsService()
+    let testUser = User(id: "123", name: "Alice")
+
+    try await every { try mock.getUser(id: "123") }.returns(testUser)
+
+    let user = try mock.getUser(id: "123")
+    #expect(user.id == testUser.id)
+    #expect(user.name == testUser.name)
+}
+
+@Test func testAsyncTypedThrows() async throws {
+    let mock = MockTypedThrowsService()
+
+    try await every { try await mock.fetchUsers() }.throws(UserError.permissionDenied)
+
+    do {
+        _ = try await mock.fetchUsers()
+        Issue.record("Expected UserError.permissionDenied")
+    } catch {
+        // Success
+    }
+}
+
+@Test func testTypedThrowsVoidMethod() async throws {
+    let mock = MockTypedThrowsService()
+    let user = User(id: "123", name: "Alice")
+
+    try await every { try mock.updateUser(user) }.throws(UserError.permissionDenied)
+
+    do {
+        try mock.updateUser(user)
+        Issue.record("Expected UserError.permissionDenied")
+    } catch {
+        #expect(error == .permissionDenied)
+    }
+}
+
+@Test func testTypedThrowsAsyncSuccess() async throws {
+    let mock = MockTypedThrowsService()
+    let testUsers = [User(id: "1", name: "Alice"), User(id: "2", name: "Bob")]
+
+    try await every { try await mock.fetchUsers() }.returns(testUsers)
+
+    let users = try await mock.fetchUsers()
+    #expect(users.count == 2)
+    #expect(users[0].name == "Alice")
+    #expect(users[1].name == "Bob")
+}

@@ -189,6 +189,79 @@ let mock = MockService(mode: .relaxed)  // Default is .strict
 return try _mockGetStub(for: call, mockMode: _mockMode)
 ```
 
+### Result Type Support
+
+SwiftMockk provides convenience DSL methods for stubbing methods that return `Result<Success, Failure>`:
+
+**DSL methods (in `Stubbing.swift`):**
+- `returnsSuccess<Success, Failure: Error>(_ value: Success, failureType: Failure.Type)`
+- `returnsFailure<Success, Failure: Error>(_ error: Failure, successType: Success.Type)`
+
+**Implementation:**
+- Both methods construct a `Result` value and register it using `.value()` behavior
+- Type parameters must be explicit due to Swift's type inference limitations
+- Result types work naturally with the existing stub system - no special handling needed
+
+**Example:**
+```swift
+@Mockable
+protocol NetworkService {
+    func fetch(url: String) -> Result<Data, NetworkError>
+}
+
+let mock = MockNetworkService()
+await every { mock.fetch(url: any()) }.returnsSuccess(data, failureType: NetworkError.self)
+await every { mock.fetch(url: any()) }.returnsFailure(NetworkError.timeout, successType: Data.self)
+
+// Or use explicit Result construction
+let success: Result<Data, NetworkError> = .success(data)
+await every { mock.fetch(url: any()) }.returns(success)
+```
+
+**Special handling in `_mockDummyValue()`:**
+- Result types cannot be safely created as dummy values in relaxed mode
+- During stubbing/verifying mode, returns uninitialized memory (safe because value is never used)
+- In relaxed mode, throws `MockError.noStub` to require explicit stubbing
+
+### Typed Throws Support
+
+SwiftMockk supports Swift 6's typed throws syntax `throws(ErrorType)` in protocol methods.
+
+**Macro implementation (`MockableMacro.swift`):**
+- `extractThrowsInfo()` helper inspects the SwiftSyntax AST for each function's `throwsClause`
+- Uses `throwsClause?.type` to detect and extract the typed throws clause
+- Generated methods preserve the typed throws clause from the parsed syntax in their signature
+
+**Example protocol:**
+```swift
+@Mockable
+protocol UserService {
+    func getUser(id: String) throws(UserError) -> User
+    func updateUser(_ user: User) throws(UserError)
+}
+```
+
+**Generated method:**
+```swift
+public func getUser(id: String) throws(UserError) -> User {
+    let matchers = MatcherRegistry.shared.extractMatchers()
+    let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+    let call = MethodCall(mockId: _mockId, name: "getUser", args: [id], matchMode: matchMode)
+    _recorder.record(call)
+    return try _mockGetTypedStub(for: call, mockMode: _mockMode)
+}
+```
+
+**Key design decisions:**
+- No runtime type validation needed - Swift's type system enforces correctness at compile time
+- Typed errors conform to `Error`, so existing stub system works without changes
+- `.throws()` DSL method works naturally with typed throws
+- Stub storage remains type-erased (`Error`), but method signatures are type-safe
+
+**Limitations:**
+- Requires Swift 6+ language mode
+- Requires swift-syntax 600.0.0+ for typed throws support (older versions are not supported)
+
 ## Important Patterns and Conventions
 
 ### Sendable Compliance (Swift 6)
@@ -315,13 +388,51 @@ The mode check is crucial because:
 3. Without the mode check, the method would try to look up a non-existent stub and crash
 4. The returned dummy value is never actually used - it's discarded by the `every {}` function
 
+## Result Type Support
+
+SwiftMockk provides convenience methods for stubbing methods that return `Result<Success, Failure>`:
+
+```swift
+// Success case
+await every { mock.fetch(url: any()) }.returnsSuccess(data, failureType: NetworkError.self)
+
+// Failure case
+await every { mock.fetch(url: any()) }.returnsFailure(NetworkError.timeout, successType: Data.self)
+
+// Explicit construction still works
+await every { mock.fetch(url: "test") }.returns(.success(data))
+```
+
+**Implementation**: The `Stubbing` class provides `returnsSuccess` and `returnsFailure` methods that construct Result values internally. Type parameters are required due to Swift's type inference limitations.
+
+## Typed Throws Support
+
+SwiftMockk supports Swift 6's typed throws syntax (`throws(ErrorType)`):
+
+```swift
+@Mockable
+protocol UserService {
+    func getUser(id: String) throws(UserError) -> User
+    func fetchUsers() async throws(UserError) -> [User]
+}
+```
+
+**Implementation Details**:
+- The macro detects typed throws using `throwsClause.type` from swift-syntax 600.0.0+
+- Generated mocks preserve the typed throws signature
+- Special stub helpers (`_mockGetTypedStub`, `_mockGetTypedAsyncStub`, `_mockExecuteTypedThrowingStub`) are used for typed throws
+- These helpers use `fatalError()` when no stub is found, instead of throwing `MockError.noStub`
+- User-provided errors from stubs are cast to the specific error type using `as!`
+
+**Why fatal error for missing stubs**: Swift's typed throws means a method can ONLY throw the specified error type. It cannot throw `MockError`. Therefore, typed throws methods MUST be stubbed before use.
+
 ## Known Limitations
 
 1. **Generics**: Basic support, but complex generic constraints may not work
 2. **Relaxed mocks with complex types**: Relaxed mode only works with primitive types (Int, String, Bool, etc.), not complex structs or classes
-3. **Spies**: Not implemented (cannot call through to real implementations)
-4. **Classes**: Can only mock protocols, not concrete classes
-5. **Some edge cases**: A few integration tests may fail in edge cases with complex throwing/async combinations
+3. **Typed throws must be stubbed**: Unstubbed typed throws methods will `fatalError()` instead of throwing `MockError.noStub` (due to Swift's typed throws limitations)
+4. **Spies**: Not implemented (cannot call through to real implementations)
+5. **Classes**: Can only mock protocols, not concrete classes
 
 ## Debugging Tips
 

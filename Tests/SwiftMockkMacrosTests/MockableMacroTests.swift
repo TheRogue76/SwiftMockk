@@ -451,3 +451,227 @@ let testMacros: [String: Macro.Type] = [
         macros: testMacros
     )
 }
+
+// MARK: - Result Type Tests
+
+@Test func testResultTypeMethod() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol NetworkService {
+            func fetch(url: String) -> Result<Data, NetworkError>
+        }
+        """,
+        expandedSource: """
+        protocol NetworkService {
+            func fetch(url: String) -> Result<Data, NetworkError>
+        }
+
+        public class MockNetworkService: NetworkService, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder {
+                CallRecorder.shared(for: _mockId)
+            }
+
+            public init() {
+            }
+
+            public func fetch(url: String) -> Result<Data, NetworkError> {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "fetch", args: [url], matchMode: matchMode)
+                _recorder.record(call)
+                return try! _mockGetStub(for: call, mockMode: _mockMode)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+@Test func testAsyncResultTypeMethod() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol NetworkService {
+            func upload(data: Data) async -> Result<Void, NetworkError>
+        }
+        """,
+        expandedSource: """
+        protocol NetworkService {
+            func upload(data: Data) async -> Result<Void, NetworkError>
+        }
+
+        public class MockNetworkService: NetworkService, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder {
+                CallRecorder.shared(for: _mockId)
+            }
+
+            public init() {
+            }
+
+            public func upload(data: Data) async -> Result<Void, NetworkError> {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "upload", args: [data], matchMode: matchMode)
+                _recorder.record(call)
+                return try! await _mockGetAsyncStub(for: call, mockMode: _mockMode)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+// MARK: - Typed Throws Tests
+
+@Test func testTypedThrowsMethod() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol UserService {
+            func getUser(id: String) throws(UserError) -> User
+        }
+        """,
+        expandedSource: """
+        protocol UserService {
+            func getUser(id: String) throws(UserError) -> User
+        }
+
+        public class MockUserService: UserService, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder {
+                CallRecorder.shared(for: _mockId)
+            }
+
+            public init() {
+            }
+
+            public func getUser(id: String) throws(UserError) -> User {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "getUser", args: [id], matchMode: matchMode)
+                _recorder.record(call)
+                return try _mockGetTypedStub(for: call, mockMode: _mockMode, errorType: UserError.self)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+@Test func testAsyncTypedThrowsMethod() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol UserService {
+            func fetchUsers() async throws(UserError) -> [User]
+        }
+        """,
+        expandedSource: """
+        protocol UserService {
+            func fetchUsers() async throws(UserError) -> [User]
+        }
+
+        public class MockUserService: UserService, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder {
+                CallRecorder.shared(for: _mockId)
+            }
+
+            public init() {
+            }
+
+            public func fetchUsers() async throws(UserError) -> [User] {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "fetchUsers", args: [], matchMode: matchMode)
+                _recorder.record(call)
+                return try await _mockGetTypedAsyncStub(for: call, mockMode: _mockMode, errorType: UserError.self)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+@Test func testVoidTypedThrowsMethod() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol UserService {
+            func updateUser(_ user: User) throws(UserError)
+        }
+        """,
+        expandedSource: """
+        protocol UserService {
+            func updateUser(_ user: User) throws(UserError)
+        }
+
+        public class MockUserService: UserService, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder {
+                CallRecorder.shared(for: _mockId)
+            }
+
+            public init() {
+            }
+
+            public func updateUser(_ user: User) throws(UserError) {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "updateUser", args: [user], matchMode: matchMode)
+                _recorder.record(call)
+                try _mockExecuteTypedThrowingStub(for: call, errorType: UserError.self)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+@Test func testMixedThrowsTypes() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol MixedService {
+            func standardThrows() throws -> String
+            func typedThrows() throws(CustomError) -> String
+        }
+        """,
+        expandedSource: """
+        protocol MixedService {
+            func standardThrows() throws -> String
+            func typedThrows() throws(CustomError) -> String
+        }
+
+        public class MockMixedService: MixedService, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder {
+                CallRecorder.shared(for: _mockId)
+            }
+
+            public init() {
+            }
+
+            public func standardThrows() throws -> String {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "standardThrows", args: [], matchMode: matchMode)
+                _recorder.record(call)
+                return try _mockGetStub(for: call, mockMode: _mockMode)
+            }
+
+            public func typedThrows() throws(CustomError) -> String {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "typedThrows", args: [], matchMode: matchMode)
+                _recorder.record(call)
+                return try _mockGetTypedStub(for: call, mockMode: _mockMode, errorType: CustomError.self)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}

@@ -29,4 +29,26 @@ public class Stubbing {
             behavior: .closure(block)
         )
     }
+
+    /// Configure the stub to return a success Result
+    /// - Parameters:
+    ///   - value: The success value
+    ///   - failureType: The failure error type (required for type inference)
+    public func returnsSuccess<Success, Failure: Error>(_ value: Success, failureType: Failure.Type) {
+        StubbingRegistry.shared.registerStub(
+            for: call,
+            behavior: .value(Result<Success, Failure>.success(value))
+        )
+    }
+
+    /// Configure the stub to return a failure Result
+    /// - Parameters:
+    ///   - error: The failure error
+    ///   - successType: The success value type (required for type inference)
+    public func returnsFailure<Success, Failure: Error>(_ error: Failure, successType: Success.Type) {
+        StubbingRegistry.shared.registerStub(
+            for: call,
+            behavior: .value(Result<Success, Failure>.failure(error))
+        )
+    }
 }
