@@ -248,7 +248,7 @@ public func getUser(id: String) throws(UserError) -> User {
     let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
     let call = MethodCall(mockId: _mockId, name: "getUser", args: [id], matchMode: matchMode)
     _recorder.record(call)
-    return try _mockGetStub(for: call, mockMode: _mockMode)
+    return try _mockGetTypedStub(for: call, mockMode: _mockMode)
 }
 ```
 
