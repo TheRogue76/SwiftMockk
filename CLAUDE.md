@@ -228,9 +228,9 @@ await every { mock.fetch(url: any()) }.returns(success)
 SwiftMockk supports Swift 6's typed throws syntax `throws(ErrorType)` in protocol methods.
 
 **Macro implementation (`MockableMacro.swift`):**
-- `extractThrowsInfo()` helper detects typed throws using regex pattern matching on effect specifiers
-- Regex pattern: `throws\s*\([^)]+\)` extracts the typed throws clause
-- Generated methods preserve the typed throws clause in their signature
+- `extractThrowsInfo()` helper inspects the SwiftSyntax AST for each function's `throwsClause`
+- Uses `throwsClause?.type` to detect and extract the typed throws clause
+- Generated methods preserve the typed throws clause from the parsed syntax in their signature
 
 **Example protocol:**
 ```swift
