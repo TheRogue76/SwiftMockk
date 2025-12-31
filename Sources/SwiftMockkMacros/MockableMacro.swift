@@ -63,11 +63,33 @@ public struct MockableMacro: PeerMacro {
         return [DeclSyntax(mockClass)]
     }
 
+    /// Extract throws clause information from function declaration
+    /// swift-syntax 600.0.0+ has proper typed throws support
+    /// Returns whether the method throws (used for detection only, not code generation)
+    private static func extractThrowsInfo(
+        from funcDecl: FunctionDeclSyntax
+    ) -> (isThrowing: Bool, clause: String) {
+        guard let effectSpecifiers = funcDecl.signature.effectSpecifiers,
+              let throwsClause = effectSpecifiers.throwsClause else {
+            return (false, "")
+        }
+
+        // Check if there's a type in the throws clause
+        if let throwType = throwsClause.type {
+            let typeString = throwType.trimmedDescription
+            return (true, "(\(typeString))")
+        }
+
+        // Untyped throws
+        return (true, "")
+    }
+
     /// Generate a mock implementation for a protocol method
     private static func generateMockMethod(for funcDecl: FunctionDeclSyntax) throws -> DeclSyntax {
         let funcName = funcDecl.name.text
         let isAsync = funcDecl.signature.effectSpecifiers?.asyncSpecifier != nil
-        let isThrowing = funcDecl.signature.effectSpecifiers?.throwsSpecifier != nil
+        let throwsInfo = extractThrowsInfo(from: funcDecl)
+        let isThrowing = throwsInfo.isThrowing
         let returnType = funcDecl.signature.returnClause?.type
         let hasReturnValue = returnType != nil
 
@@ -100,7 +122,8 @@ public struct MockableMacro: PeerMacro {
             methodSignature += " async"
         }
         if isThrowing {
-            methodSignature += " throws"
+            // Preserve typed throws from protocol
+            methodSignature += " throws\(throwsInfo.clause)"
         }
         if let returnType = returnType {
             methodSignature += " -> \(returnType.trimmedDescription)"
@@ -116,16 +139,28 @@ public struct MockableMacro: PeerMacro {
         """
 
         // Add stub lookup using helper functions
+        // For typed throws, use special helpers that fatal error instead of throwing MockError
+        let hasTypedThrows = !throwsInfo.clause.isEmpty
+        let errorTypeName = hasTypedThrows ? String(throwsInfo.clause.dropFirst().dropLast()) : ""
+
         if hasReturnValue {
             if isAsync && isThrowing {
-                // Async throwing method - can propagate errors normally
-                methodBody += "\n    return try await _mockGetAsyncStub(for: call, mockMode: _mockMode)"
+                // Async throwing method
+                if hasTypedThrows {
+                    methodBody += "\n    return try await _mockGetTypedAsyncStub(for: call, mockMode: _mockMode, errorType: \(errorTypeName).self)"
+                } else {
+                    methodBody += "\n    return try await _mockGetAsyncStub(for: call, mockMode: _mockMode)"
+                }
             } else if isAsync {
                 // Async non-throwing - just use try! since DSL functions handle errors
                 methodBody += "\n    return try! await _mockGetAsyncStub(for: call, mockMode: _mockMode)"
             } else if isThrowing {
-                // Sync throwing method - can propagate errors normally
-                methodBody += "\n    return try _mockGetStub(for: call, mockMode: _mockMode)"
+                // Sync throwing method
+                if hasTypedThrows {
+                    methodBody += "\n    return try _mockGetTypedStub(for: call, mockMode: _mockMode, errorType: \(errorTypeName).self)"
+                } else {
+                    methodBody += "\n    return try _mockGetStub(for: call, mockMode: _mockMode)"
+                }
             } else {
                 // Sync non-throwing - just use try! since DSL functions handle errors
                 methodBody += "\n    return try! _mockGetStub(for: call, mockMode: _mockMode)"
@@ -133,7 +168,11 @@ public struct MockableMacro: PeerMacro {
         } else {
             // Void method
             if isThrowing {
-                methodBody += "\n    try _mockExecuteThrowingStub(for: call)"
+                if hasTypedThrows {
+                    methodBody += "\n    try _mockExecuteTypedThrowingStub(for: call, errorType: \(errorTypeName).self)"
+                } else {
+                    methodBody += "\n    try _mockExecuteThrowingStub(for: call)"
+                }
             }
         }
 

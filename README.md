@@ -18,6 +18,8 @@ A Swift mocking library inspired by Kotlin's [mockk](https://mockk.io/), providi
 - ✅ **Property mocking** - Full support for both get and get/set properties
 - ✅ **Order verification** - Verify calls happened in a specific order with `verifyOrder()` and `verifySequence()`
 - ✅ **Relaxed mocks** - Optional mode that returns default values for unstubbed methods
+- ✅ **Result type support** - Convenience methods for stubbing `Result<Success, Failure>` return types
+- ✅ **Typed throws support** - Full support for Swift 6's typed throws syntax `throws(ErrorType)`
 
 ## Requirements
 
@@ -352,9 +354,113 @@ protocol CalculatorService {
 }
 ```
 
+### 10. Result Type Support
+
+SwiftMockk provides convenience methods for stubbing methods that return `Result<Success, Failure>`:
+
+```swift
+public enum NetworkError: Error, Equatable {
+    case timeout
+    case serverError
+}
+
+@Mockable
+public protocol NetworkService {
+    func fetch(url: String) -> Result<Data, NetworkError>
+}
+
+@Test func testResultTypeSuccess() async throws {
+    let mock = MockNetworkService()
+    let testData = Data([1, 2, 3, 4])
+
+    // Use convenience method for success
+    await every { mock.fetch(url: any()) }.returnsSuccess(testData, failureType: NetworkError.self)
+
+    let result = mock.fetch(url: "https://example.com")
+    guard case .success(let data) = result else {
+        Issue.record("Expected success")
+        return
+    }
+    #expect(data == testData)
+}
+
+@Test func testResultTypeFailure() async throws {
+    let mock = MockNetworkService()
+
+    // Use convenience method for failure
+    await every { mock.fetch(url: any()) }.returnsFailure(NetworkError.timeout, successType: Data.self)
+
+    let result = mock.fetch(url: "https://example.com")
+    guard case .failure(let error) = result else {
+        Issue.record("Expected failure")
+        return
+    }
+    #expect(error == .timeout)
+}
+
+@Test func testResultWithExplicitConstruction() async throws {
+    let mock = MockNetworkService()
+    let testData = Data([1, 2, 3, 4])
+
+    // Or use explicit Result construction
+    let success: Result<Data, NetworkError> = .success(testData)
+    await every { mock.fetch(url: "test") }.returns(success)
+
+    let result = mock.fetch(url: "test")
+    guard case .success(let data) = result else {
+        Issue.record("Expected success")
+        return
+    }
+    #expect(data == testData)
+}
+```
+
+**Note**: Due to Swift's type inference limitations, both convenience methods require explicit type parameters:
+- `returnsSuccess(_:failureType:)` - requires the failure error type
+- `returnsFailure(_:successType:)` - requires the success value type
+
+### 11. Typed Throws Support (Swift 6+)
+
+SwiftMockk supports Swift 6's typed throws syntax. When a protocol method uses typed throws, the generated mock preserves the error type:
+
+```swift
+public enum UserError: Error, Equatable {
+    case notFound
+    case invalidId
+}
+
+// Note: Swift 6+ typed throws syntax: throws(ErrorType)
+@Mockable
+public protocol UserService {
+    func getUser(id: String) throws(UserError) -> User
+    func fetchUsers() async throws(UserError) -> [User]
+}
+
+@Test func testTypedThrows() async throws {
+    let mock = MockUserService()
+
+    // Stub to throw a specific error type
+    try await every { try mock.getUser(id: any()) }.throws(UserError.notFound)
+
+    do {
+        _ = try mock.getUser(id: "123")
+        Issue.record("Expected UserError.notFound")
+    } catch let error as UserError {
+        #expect(error == .notFound)
+    }
+}
+```
+
+**Important Notes on Typed Throws**:
+- Typed throws syntax `throws(ErrorType)` requires Swift 6+ language mode
+- **Typed throws methods MUST be stubbed**: If a typed throws method is called without a stub, it will `fatalError()` instead of throwing `MockError.noStub`. This is because Swift's typed throws cannot throw `MockError` - only the specific error type
+- When stubbing typed throws methods, the error you provide must match the error type (e.g., `UserError` for `throws(UserError)`)
+- User-provided errors from stubs are automatically cast to the correct type
+
 ## Current Limitations
 
-- Relaxed mocks only work with primitive types (Int, String, Bool, etc.), not complex structs
+- **Typed throws methods must be stubbed**: Unstubbed typed throws methods will `fatalError()` instead of throwing `MockError.noStub` (see Typed Throws section above)
+- Relaxed mocks only work with primitive types (Int, String, Bool, etc.), not complex structs or Result types
 - Spies not yet implemented (cannot call through to real implementations)
 - Only works with protocols (cannot mock concrete classes)
 
