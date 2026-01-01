@@ -582,10 +582,34 @@ protocol Cache<Key, Value> where Key: Hashable {
 }
 ```
 
+#### Variadic Generics (Swift 5.9+)
+
+Variadic generics with parameter packs are fully supported:
+
+```swift
+@Mockable
+protocol VariadicProcessor {
+    func process<each T>(_ values: repeat each T) -> (repeat each T)
+}
+
+@Test func testVariadicGenerics() async throws {
+    let mock = MockVariadicProcessor()
+
+    // Stub with multiple types
+    await every { mock.process("Hello", 42, true) }.returns(("Hello", 42, true))
+
+    let result = mock.process("Hello", 42, true)
+    #expect(result.0 == "Hello")
+    #expect(result.1 == 42)
+    #expect(result.2 == true)
+}
+```
+
+**Note**: Parameter pack arguments aren't recorded individually (due to Swift type erasure limitations), but stubbing and verification by method name work correctly.
+
 ## Current Limitations
 
 - **Typed throws methods must be stubbed**: Unstubbed typed throws methods will `fatalError()` instead of throwing `MockError.noStub` (see Typed Throws section above)
-- **Variadic generics**: Variadic generics (Swift 5.9+) are not yet supported
 - **Relaxed mocks**: Relaxed mode only works with primitive types (Int, String, Bool, etc.), not complex structs or Result types
 - **Spies**: Not yet implemented (cannot call through to real implementations)
 - **Protocol-only**: Can only mock protocols, not concrete classes

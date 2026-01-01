@@ -199,12 +199,23 @@ public struct MockableMacro: PeerMacro {
         let params = funcDecl.signature.parameterClause.parameters
 
         // Build the argument array for recording
-        let argNames = params.map { param -> String in
+        var hasVariadicParam = false
+        let argElements = params.compactMap { param -> String? in
             let argName = param.secondName?.text ?? param.firstName.text
-            return argName
+            let typeDesc = param.type.trimmedDescription
+
+            // Check if this is a variadic parameter pack (contains "repeat each")
+            if typeDesc.contains("repeat each") {
+                hasVariadicParam = true
+                // Parameter packs can't be easily type-erased to [Any]
+                // Skip them in argument recording - verification will work by method name
+                return nil
+            } else {
+                return argName
+            }
         }
 
-        let argsArrayLiteral = argNames.isEmpty ? "[]" : "[\(argNames.joined(separator: ", "))]"
+        let argsArrayLiteral = argElements.isEmpty ? "[]" : "[\(argElements.joined(separator: ", "))]"
 
         // Build the method signature
         var methodSignature = "public func \(funcName)"

@@ -477,6 +477,30 @@ let container = MockContainer<String>()
 await every { container.getAll() }.returns(["Hello", "World"])
 ```
 
+### Variadic Generics (Swift 5.9+)
+
+Variadic generics with parameter packs are supported:
+
+```swift
+@Mockable
+protocol VariadicProcessor {
+    func process<each T>(_ values: repeat each T) -> (repeat each T)
+}
+
+@Mockable
+protocol VariadicValidator {
+    func validate<each T>(_ items: repeat each T) -> Bool where repeat each T: Equatable
+}
+
+let processor = MockVariadicProcessor()
+await every { processor.process("Hello", 42, true) }.returns(("Hello", 42, true))
+
+let result = processor.process("Hello", 42, true)
+// result == ("Hello", 42, true)
+```
+
+**Note**: Parameter pack arguments aren't recorded individually due to type erasure limitations, but stubbing and verification by method name work correctly.
+
 ### Generics Implementation Details
 
 - Generic parameters and where clauses are preserved from protocol to mock class
@@ -486,9 +510,9 @@ await every { container.getAll() }.returns(["Hello", "World"])
 
 ## Known Limitations
 
-1. **Generics**: Variadic generics (Swift 5.9+) are not yet supported
-2. **Relaxed mocks with complex types**: Relaxed mode only works with primitive types (Int, String, Bool, etc.), not complex structs or classes
-3. **Typed throws must be stubbed**: Unstubbed typed throws methods will `fatalError()` instead of throwing `MockError.noStub` (due to Swift's typed throws limitations)
+1. **Relaxed mocks with complex types**: Relaxed mode only works with primitive types (Int, String, Bool, etc.), not complex structs or classes
+2. **Typed throws must be stubbed**: Unstubbed typed throws methods will `fatalError()` instead of throwing `MockError.noStub` (due to Swift's typed throws limitations)
+3. **Variadic generics argument recording**: Methods with parameter packs don't record individual arguments (due to type erasure limitations), but stubbing and verification by method name still work
 4. **Spies**: Not implemented (cannot call through to real implementations)
 5. **Classes**: Can only mock protocols, not concrete classes
 

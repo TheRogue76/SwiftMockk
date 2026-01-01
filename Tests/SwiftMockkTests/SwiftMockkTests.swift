@@ -667,3 +667,37 @@ protocol AssociatedTypeMapper {
     let result = mock.map(42)
     #expect(result == "42")
 }
+
+// MARK: - Variadic Generics Tests (Swift 5.9+)
+
+@Mockable
+protocol VariadicProcessor {
+    func process<each T>(_ values: repeat each T) -> (repeat each T)
+}
+
+@Test func testVariadicGenericStubbing() async throws {
+    let mock = MockVariadicProcessor()
+
+    // Stub with specific types
+    await every { mock.process("Hello", 42, true) }.returns(("Hello", 42, true))
+
+    let result = mock.process("Hello", 42, true)
+    #expect(result.0 == "Hello")
+    #expect(result.1 == 42)
+    #expect(result.2 == true)
+}
+
+@Mockable
+protocol VariadicValidator {
+    func validate<each T>(_ items: repeat each T) -> Bool where repeat each T: Equatable
+}
+
+@Test func testVariadicGenericWithConstraints() async throws {
+    let mock = MockVariadicValidator()
+
+    // Stub validation
+    await every { mock.validate("test", 123) }.returns(true)
+
+    let result = mock.validate("test", 123)
+    #expect(result == true)
+}

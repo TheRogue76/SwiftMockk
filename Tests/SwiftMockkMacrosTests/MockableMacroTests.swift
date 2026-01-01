@@ -1099,3 +1099,104 @@ let testMacros: [String: Macro.Type] = [
         macros: testMacros
     )
 }
+
+// MARK: - Variadic Generics Tests (Swift 5.9+)
+
+@Test func testVariadicGenericMethodSimple() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol Processor {
+            func process<each T>(_ values: repeat each T) -> (repeat each T)
+        }
+        """,
+        expandedSource: """
+        protocol Processor {
+            func process<each T>(_ values: repeat each T) -> (repeat each T)
+        }
+
+        public class MockProcessor: Processor, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder { CallRecorder.shared(for: _mockId) }
+            public var _mockMode: MockMode = .strict
+
+            public init(mode: MockMode = .strict) { _mockMode = mode }
+
+            public func process<each T>(_ values: repeat each T) -> (repeat each T) {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "process", args: [], matchMode: matchMode)
+                _recorder.record(call)
+                return try! _mockGetStub(for: call, mockMode: _mockMode)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+@Test func testVariadicGenericMethodWithConstraints() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol Validator {
+            func validate<each T>(_ items: repeat each T) -> Bool where repeat each T: Equatable
+        }
+        """,
+        expandedSource: """
+        protocol Validator {
+            func validate<each T>(_ items: repeat each T) -> Bool where repeat each T: Equatable
+        }
+
+        public class MockValidator: Validator, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder { CallRecorder.shared(for: _mockId) }
+            public var _mockMode: MockMode = .strict
+
+            public init(mode: MockMode = .strict) { _mockMode = mode }
+
+            public func validate<each T>(_ items: repeat each T) -> Bool where repeat each T: Equatable {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "validate", args: [], matchMode: matchMode)
+                _recorder.record(call)
+                return try! _mockGetStub(for: call, mockMode: _mockMode)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+@Test func testVariadicGenericMethodMultiplePacks() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol Mapper {
+            func map<each Input, each Output>(_ inputs: repeat each Input) -> (repeat each Output)
+        }
+        """,
+        expandedSource: """
+        protocol Mapper {
+            func map<each Input, each Output>(_ inputs: repeat each Input) -> (repeat each Output)
+        }
+
+        public class MockMapper: Mapper, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder { CallRecorder.shared(for: _mockId) }
+            public var _mockMode: MockMode = .strict
+
+            public init(mode: MockMode = .strict) { _mockMode = mode }
+
+            public func map<each Input, each Output>(_ inputs: repeat each Input) -> (repeat each Output) {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "map", args: [], matchMode: matchMode)
+                _recorder.record(call)
+                return try! _mockGetStub(for: call, mockMode: _mockMode)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
