@@ -48,16 +48,29 @@ struct SwiftMockkGenerator: ParsableCommand {
             allProtocols.append(contentsOf: protocols)
         }
 
+        // Deduplicate protocols by name (same protocol may be found from overlapping directories)
+        var seenNames = Set<String>()
+        let uniqueProtocols = allProtocols.filter { proto in
+            if seenNames.contains(proto.name) {
+                if verbose {
+                    print("Skipping duplicate protocol: \(proto.name)")
+                }
+                return false
+            }
+            seenNames.insert(proto.name)
+            return true
+        }
+
         if verbose {
-            print("Found \(allProtocols.count) protocols to mock:")
-            for proto in allProtocols {
+            print("Found \(uniqueProtocols.count) protocols to mock:")
+            for proto in uniqueProtocols {
                 print("  - \(proto.name)")
             }
         }
 
         // Generate mocks
         let generator = MockGenerator()
-        let generatedCode = generator.generateMocks(for: allProtocols, moduleName: module)
+        let generatedCode = generator.generateMocks(for: uniqueProtocols, moduleName: module)
 
         // Write output
         let outputURL = URL(fileURLWithPath: output)

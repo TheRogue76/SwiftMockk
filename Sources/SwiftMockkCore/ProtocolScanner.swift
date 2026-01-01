@@ -63,6 +63,9 @@ public struct ProtocolScanner {
         var protocols: [ProtocolInfo] = []
         let parser = ProtocolParser()
 
+        // Extract imports from the source file
+        let imports = extractImports(from: sourceFile)
+
         // Find all protocol declarations and check if they're marked
         let visitor = MarkedProtocolVisitor(source: source)
         visitor.walk(sourceFile)
@@ -72,11 +75,23 @@ public struct ProtocolScanner {
                 let location = fileName ?? "source"
                 print("  Found marked protocol: \(protocolDecl.name.text) in \(location)")
             }
-            let info = parser.parse(protocolDecl, moduleName: moduleName)
+            let info = parser.parse(protocolDecl, moduleName: moduleName, imports: imports)
             protocols.append(info)
         }
 
         return protocols
+    }
+
+    /// Extract import statements from a source file
+    private func extractImports(from sourceFile: SourceFileSyntax) -> [String] {
+        var imports: [String] = []
+        for statement in sourceFile.statements {
+            if let importDecl = statement.item.as(ImportDeclSyntax.self) {
+                let importPath = importDecl.path.map { $0.name.text }.joined(separator: ".")
+                imports.append(importPath)
+            }
+        }
+        return imports
     }
 }
 

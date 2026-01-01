@@ -23,6 +23,9 @@ public struct ProtocolInfo: Sendable {
     /// The module name where the protocol is defined (for import statements)
     public let moduleName: String?
 
+    /// Import statements from the source file where the protocol is defined
+    public let imports: [String]
+
     public init(
         name: String,
         genericParameters: String? = nil,
@@ -30,7 +33,8 @@ public struct ProtocolInfo: Sendable {
         associatedTypes: [AssociatedTypeInfo] = [],
         methods: [MethodInfo] = [],
         properties: [PropertyInfo] = [],
-        moduleName: String? = nil
+        moduleName: String? = nil,
+        imports: [String] = []
     ) {
         self.name = name
         self.genericParameters = genericParameters
@@ -39,6 +43,7 @@ public struct ProtocolInfo: Sendable {
         self.methods = methods
         self.properties = properties
         self.moduleName = moduleName
+        self.imports = imports
     }
 }
 

@@ -7,7 +7,7 @@ public struct ProtocolParser {
     public init() {}
 
     /// Parse a ProtocolDeclSyntax into ProtocolInfo
-    public func parse(_ protocolDecl: ProtocolDeclSyntax, moduleName: String? = nil) -> ProtocolInfo {
+    public func parse(_ protocolDecl: ProtocolDeclSyntax, moduleName: String? = nil, imports: [String] = []) -> ProtocolInfo {
         let name = protocolDecl.name.text
 
         // Extract protocol-level generic parameters
@@ -36,7 +36,8 @@ public struct ProtocolParser {
             associatedTypes: associatedTypes,
             methods: methods,
             properties: properties,
-            moduleName: moduleName
+            moduleName: moduleName,
+            imports: imports
         )
     }
 
