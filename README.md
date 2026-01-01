@@ -745,4 +745,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Acknowledgments
 
-Inspired by [mockk](https://mockk.io/) - the excellent mocking library for Kotlin and [Mockable](https://github.com/Kolos65/Mockable/tree/main) for the Swift Macro idea.
+Inspired by [mockk](https://mockk.io/) - the excellent mocking library for Kotlin
