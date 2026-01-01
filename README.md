@@ -20,6 +20,7 @@ A Swift mocking library inspired by Kotlin's [mockk](https://mockk.io/), providi
 - ✅ **Relaxed mocks** - Optional mode that returns default values for unstubbed methods
 - ✅ **Result type support** - Convenience methods for stubbing `Result<Success, Failure>` return types
 - ✅ **Typed throws support** - Full support for Swift 6's typed throws syntax `throws(ErrorType)`
+- ✅ **Generics support** - Full support for generic methods, generic protocols, and associated types
 
 ## Requirements
 
@@ -457,12 +458,137 @@ public protocol UserService {
 - When stubbing typed throws methods, the error you provide must match the error type (e.g., `UserError` for `throws(UserError)`)
 - User-provided errors from stubs are automatically cast to the correct type
 
+### 12. Generics Support
+
+SwiftMockk provides comprehensive support for generics in protocols, including generic methods, generic protocols, and associated types.
+
+#### Generic Methods
+
+Methods with type parameters are fully supported, including constraints and where clauses:
+
+```swift
+@Mockable
+protocol DataRepository {
+    func fetch<T: Decodable>() async throws -> T
+    func save<T: Encodable>(_ item: T) async throws
+    func process<T>(_ data: T) throws -> String where T: Codable & Sendable
+}
+
+@Test func testGenericMethod() async throws {
+    let mock = MockDataRepository()
+
+    struct User: Codable, Equatable {
+        let id: String
+        let name: String
+    }
+
+    let testUser = User(id: "123", name: "Alice")
+
+    // Stub with type inference
+    try await every { try await mock.fetch() as User }.returns(testUser)
+
+    // Call with specific type
+    let result: User = try await mock.fetch()
+
+    #expect(result == testUser)
+}
+```
+
+**Key Points**:
+- Type inference works naturally - specify the return type when stubbing
+- Generic constraints (e.g., `T: Decodable`) are preserved
+- Where clauses are fully supported
+
+#### Generic Protocols
+
+Protocols with primary associated types (Swift 5.7+) are fully supported:
+
+```swift
+@Mockable
+protocol Repository<Entity> {
+    func fetch(id: String) async throws -> Entity
+    func save(_ entity: Entity) async throws
+    func delete(id: String) async throws
+}
+
+@Test func testGenericProtocol() async throws {
+    struct Product: Equatable {
+        let id: String
+        let name: String
+    }
+
+    // Instantiate with specific type
+    let productRepo = MockRepository<Product>()
+    let testProduct = Product(id: "p1", name: "Widget")
+
+    try await every { try await productRepo.fetch(id: "p1") }.returns(testProduct)
+
+    let result = try await productRepo.fetch(id: "p1")
+    #expect(result == testProduct)
+}
+```
+
+**Key Points**:
+- Works with primary associated types: `protocol Repository<Entity>`
+- Create mocks with specific types: `MockRepository<Product>()`
+- Can create multiple mocks with different types in the same test
+
+#### Associated Types
+
+Traditional `associatedtype` declarations are automatically converted to generic parameters:
+
+```swift
+@Mockable
+protocol Container {
+    associatedtype Item
+    func add(_ item: Item)
+    func getAll() -> [Item]
+}
+
+@Test func testAssociatedTypes() async throws {
+    // MockContainer<Item> is generated
+    let stringContainer = MockContainer<String>()
+
+    await every { stringContainer.getAll() }.returns(["Hello", "World"])
+
+    let result = stringContainer.getAll()
+    #expect(result == ["Hello", "World"])
+}
+```
+
+**Key Points**:
+- Associated types are converted to generic parameters on the mock class
+- Constraints on associated types are preserved as where clauses
+- Multiple associated types are supported: `associatedtype Input` + `associatedtype Output`
+
+#### Multiple Type Parameters
+
+Protocols with multiple type parameters work seamlessly:
+
+```swift
+@Mockable
+protocol Cache<Key, Value> where Key: Hashable {
+    func get(_ key: Key) -> Value?
+    func set(_ key: Key, value: Value)
+}
+
+@Test func testMultipleTypeParameters() async throws {
+    let cache = MockCache<String, Int>()
+
+    await every { cache.get("answer") }.returns(42)
+
+    let result = cache.get("answer")
+    #expect(result == 42)
+}
+```
+
 ## Current Limitations
 
 - **Typed throws methods must be stubbed**: Unstubbed typed throws methods will `fatalError()` instead of throwing `MockError.noStub` (see Typed Throws section above)
-- Relaxed mocks only work with primitive types (Int, String, Bool, etc.), not complex structs or Result types
-- Spies not yet implemented (cannot call through to real implementations)
-- Only works with protocols (cannot mock concrete classes)
+- **Variadic generics**: Variadic generics (Swift 5.9+) are not yet supported
+- **Relaxed mocks**: Relaxed mode only works with primitive types (Int, String, Bool, etc.), not complex structs or Result types
+- **Spies**: Not yet implemented (cannot call through to real implementations)
+- **Protocol-only**: Can only mock protocols, not concrete classes
 
 ## License
 
