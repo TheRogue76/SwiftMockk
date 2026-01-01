@@ -26,6 +26,7 @@ A Swift mocking library inspired by Kotlin's [mockk](https://mockk.io/), providi
 
 - Swift 6.0+
 - macOS 12+ / iOS 13+
+- Disabling Explicitly Built Modules in Build settings (Current limitation, trying to understand how to fix it)
 
 ## Installation
 
