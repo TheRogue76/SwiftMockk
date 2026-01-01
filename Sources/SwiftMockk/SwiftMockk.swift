@@ -40,23 +40,18 @@ private func _mockDummyValue<T>() throws -> T {
         return unsafeBitCast((), to: T.self)
     }
 
-    // Check if T is Result type - in relaxed mode, we can't create a safe dummy value
-    // But in stubbing/verifying mode, we need to return something (it won't be used)
-    let typeName = String(describing: T.self)
+    // For complex types (arrays, optionals, Result, etc.), check if we're in stubbing/verifying mode
     let mode = RecordingContext.shared.getCurrentMode()
-    if typeName.starts(with: "Result<") {
-        if mode == .stubbing || mode == .verifying {
-            // Return uninitialized memory - safe because value is never actually used in DSL
-            let size = MemoryLayout<T>.size
-            let alignment = MemoryLayout<T>.alignment
-            let ptr = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: alignment)
-            defer { ptr.deallocate() }
-            return ptr.load(as: T.self)
-        }
-        throw MockError.noStub("Cannot create dummy value for Result type in relaxed mode")
+    if mode == .stubbing || mode == .verifying {
+        // Return uninitialized memory - safe because value is never actually used in DSL
+        let size = MemoryLayout<T>.size
+        let alignment = MemoryLayout<T>.alignment
+        let ptr = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: alignment)
+        defer { ptr.deallocate() }
+        return ptr.load(as: T.self)
     }
 
-    // For other types, throw error - can't safely create dummy values
+    // In normal/relaxed mode, we can't safely create dummy values for complex types
     throw MockError.noStub("Cannot create dummy value for type \(T.self)")
 }
 
@@ -112,7 +107,9 @@ public func _mockExecuteThrowingStub(for call: MethodCall) throws(any Error) {
 // MARK: - Typed Throws Helpers
 
 /// Internal helper for typed throws methods - uses fatalError for missing stubs
-public func _mockGetTypedStub<T, E: Error>(for call: MethodCall, mockMode: MockMode = .strict, errorType: E.Type) throws(E) -> T {
+public func _mockGetTypedStub<T, E: Error>(
+    for call: MethodCall, mockMode: MockMode = .strict, errorType: E.Type
+) throws(E) -> T {
     let mode = RecordingContext.shared.getCurrentMode()
     if mode == .stubbing || mode == .verifying {
         // Return uninitialized memory - safe because value is never used in DSL
@@ -128,7 +125,10 @@ public func _mockGetTypedStub<T, E: Error>(for call: MethodCall, mockMode: MockM
         return result
     } catch MockError.noStub {
         // Typed throws methods cannot throw MockError, so fatal error instead
-        fatalError("No stub registered for typed throws method '\(call.name)'. Typed throws methods must be stubbed. Use every { ... } to stub this method.")
+        fatalError(
+            "No stub registered for typed throws method '\(call.name)'. " +
+            "Typed throws methods must be stubbed. Use every { ... } to stub this method."
+        )
     } catch {
         // Cast and rethrow user errors
         throw error as! E
@@ -136,7 +136,9 @@ public func _mockGetTypedStub<T, E: Error>(for call: MethodCall, mockMode: MockM
 }
 
 /// Internal helper for async typed throws methods
-public func _mockGetTypedAsyncStub<T, E: Error>(for call: MethodCall, mockMode: MockMode = .strict, errorType: E.Type) async throws(E) -> T {
+public func _mockGetTypedAsyncStub<T, E: Error>(
+    for call: MethodCall, mockMode: MockMode = .strict, errorType: E.Type
+) async throws(E) -> T {
     let mode = RecordingContext.shared.getCurrentMode()
     if mode == .stubbing || mode == .verifying {
         // Return uninitialized memory - safe because value is never used in DSL
@@ -151,7 +153,10 @@ public func _mockGetTypedAsyncStub<T, E: Error>(for call: MethodCall, mockMode: 
         let result: T = try await StubbingRegistry.shared.getAsyncStub(for: call)
         return result
     } catch MockError.noStub {
-        fatalError("No stub registered for typed throws method '\(call.name)'. Typed throws methods must be stubbed. Use every { ... } to stub this method.")
+        fatalError(
+            "No stub registered for typed throws method '\(call.name)'. " +
+            "Typed throws methods must be stubbed. Use every { ... } to stub this method."
+        )
     } catch {
         throw error as! E
     }
@@ -167,7 +172,10 @@ public func _mockExecuteTypedThrowingStub<E: Error>(for call: MethodCall, errorT
     do {
         try StubbingRegistry.shared.executeThrowingStub(for: call)
     } catch MockError.noStub {
-        fatalError("No stub registered for typed throws method '\(call.name)'. Typed throws methods must be stubbed. Use every { ... } to stub this method.")
+        fatalError(
+            "No stub registered for typed throws method '\(call.name)'. " +
+            "Typed throws methods must be stubbed. Use every { ... } to stub this method."
+        )
     } catch {
         throw error as! E
     }

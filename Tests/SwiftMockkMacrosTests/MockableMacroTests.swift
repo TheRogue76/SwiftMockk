@@ -5,7 +5,7 @@ import Testing
 @testable import SwiftMockkMacros
 
 let testMacros: [String: Macro.Type] = [
-    "Mockable": MockableMacro.self,
+    "Mockable": MockableMacro.self
 ]
 
 // MARK: - Basic Protocol Tests
@@ -669,6 +669,531 @@ let testMacros: [String: Macro.Type] = [
                 let call = MethodCall(mockId: _mockId, name: "typedThrows", args: [], matchMode: matchMode)
                 _recorder.record(call)
                 return try _mockGetTypedStub(for: call, mockMode: _mockMode, errorType: CustomError.self)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+// MARK: - Generic Method Tests
+
+@Test func testGenericMethodSimple() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol Repository {
+            func fetch<T: Decodable>() async throws -> T
+        }
+        """,
+        expandedSource: """
+        protocol Repository {
+            func fetch<T: Decodable>() async throws -> T
+        }
+
+        public class MockRepository: Repository, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder {
+                CallRecorder.shared(for: _mockId)
+            }
+            public var _mockMode: MockMode = .strict
+
+            public init(mode: MockMode = .strict) {
+                _mockMode = mode
+            }
+
+            public func fetch<T: Decodable>() async throws -> T {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "fetch", args: [], matchMode: matchMode)
+                _recorder.record(call)
+                return try await _mockGetAsyncStub(for: call, mockMode: _mockMode)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+@Test func testGenericMethodMultipleParams() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol Converter {
+            func convert<Source, Target>(from: Source) -> Target
+        }
+        """,
+        expandedSource: """
+        protocol Converter {
+            func convert<Source, Target>(from: Source) -> Target
+        }
+
+        public class MockConverter: Converter, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder {
+                CallRecorder.shared(for: _mockId)
+            }
+            public var _mockMode: MockMode = .strict
+
+            public init(mode: MockMode = .strict) {
+                _mockMode = mode
+            }
+
+            public func convert<Source, Target>(from: Source) -> Target {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "convert", args: [from], matchMode: matchMode)
+                _recorder.record(call)
+                return try! _mockGetStub(for: call, mockMode: _mockMode)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+@Test func testGenericMethodWithWhereClause() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol Validator {
+            func validate<T>(_ item: T) -> Bool where T: Equatable
+        }
+        """,
+        expandedSource: """
+        protocol Validator {
+            func validate<T>(_ item: T) -> Bool where T: Equatable
+        }
+
+        public class MockValidator: Validator, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder {
+                CallRecorder.shared(for: _mockId)
+            }
+            public var _mockMode: MockMode = .strict
+
+            public init(mode: MockMode = .strict) {
+                _mockMode = mode
+            }
+
+            public func validate<T>(_ item: T) -> Bool where T: Equatable {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "validate", args: [item], matchMode: matchMode)
+                _recorder.record(call)
+                return try! _mockGetStub(for: call, mockMode: _mockMode)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+@Test func testGenericMethodComplexConstraints() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol DataProcessor {
+            func process<T>(_ data: T) throws -> String where T: Codable & Sendable
+        }
+        """,
+        expandedSource: """
+        protocol DataProcessor {
+            func process<T>(_ data: T) throws -> String where T: Codable & Sendable
+        }
+
+        public class MockDataProcessor: DataProcessor, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder {
+                CallRecorder.shared(for: _mockId)
+            }
+            public var _mockMode: MockMode = .strict
+
+            public init(mode: MockMode = .strict) {
+                _mockMode = mode
+            }
+
+            public func process<T>(_ data: T) throws -> String where T: Codable & Sendable {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "process", args: [data], matchMode: matchMode)
+                _recorder.record(call)
+                return try _mockGetStub(for: call, mockMode: _mockMode)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+// MARK: - Generic Protocol Tests
+
+@Test func testGenericProtocolSimple() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol Repository<Entity> {
+            func fetch(id: String) async throws -> Entity
+            func save(_ entity: Entity) async throws
+        }
+        """,
+        expandedSource: """
+        protocol Repository<Entity> {
+            func fetch(id: String) async throws -> Entity
+            func save(_ entity: Entity) async throws
+        }
+
+        public class MockRepository<Entity>: Repository, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder {
+                CallRecorder.shared(for: _mockId)
+            }
+            public var _mockMode: MockMode = .strict
+
+            public init(mode: MockMode = .strict) {
+                _mockMode = mode
+            }
+
+            public func fetch(id: String) async throws -> Entity {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "fetch", args: [id], matchMode: matchMode)
+                _recorder.record(call)
+                return try await _mockGetAsyncStub(for: call, mockMode: _mockMode)
+            }
+
+            public func save(_ entity: Entity) async throws {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "save", args: [entity], matchMode: matchMode)
+                _recorder.record(call)
+                try await _mockExecuteAsyncThrowingStub(for: call)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+@Test func testGenericProtocolMultipleParams() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol Cache<Key, Value> where Key: Hashable {
+            func get(_ key: Key) -> Value?
+            func set(_ key: Key, value: Value)
+        }
+        """,
+        expandedSource: """
+        protocol Cache<Key, Value> where Key: Hashable {
+            func get(_ key: Key) -> Value?
+            func set(_ key: Key, value: Value)
+        }
+
+        public class MockCache<Key, Value>: Cache, Mockable where Key: Hashable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder {
+                CallRecorder.shared(for: _mockId)
+            }
+            public var _mockMode: MockMode = .strict
+
+            public init(mode: MockMode = .strict) {
+                _mockMode = mode
+            }
+
+            public func get(_ key: Key) -> Value? {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "get", args: [key], matchMode: matchMode)
+                _recorder.record(call)
+                return try! _mockGetStub(for: call, mockMode: _mockMode)
+            }
+
+            public func set(_ key: Key, value: Value) {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "set", args: [key, value], matchMode: matchMode)
+                _recorder.record(call)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+@Test func testGenericProtocolWithConstraints() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol Collection<Element> where Element: Comparable {
+            func add(_ element: Element)
+            func sorted() -> [Element]
+        }
+        """,
+        expandedSource: """
+        protocol Collection<Element> where Element: Comparable {
+            func add(_ element: Element)
+            func sorted() -> [Element]
+        }
+
+        public class MockCollection<Element>: Collection, Mockable where Element: Comparable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder {
+                CallRecorder.shared(for: _mockId)
+            }
+            public var _mockMode: MockMode = .strict
+
+            public init(mode: MockMode = .strict) {
+                _mockMode = mode
+            }
+
+            public func add(_ element: Element) {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "add", args: [element], matchMode: matchMode)
+                _recorder.record(call)
+            }
+
+            public func sorted() -> [Element] {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "sorted", args: [], matchMode: matchMode)
+                _recorder.record(call)
+                return try! _mockGetStub(for: call, mockMode: _mockMode)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+// MARK: - Associated Type Tests
+
+@Test func testAssociatedTypeSimple() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol Container {
+            associatedtype Item
+            func add(_ item: Item)
+            func get(at index: Int) -> Item?
+        }
+        """,
+        expandedSource: """
+        protocol Container {
+            associatedtype Item
+            func add(_ item: Item)
+            func get(at index: Int) -> Item?
+        }
+
+        public class MockContainer<Item>: Container, Mockable {
+            public typealias Item = Item
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder {
+                CallRecorder.shared(for: _mockId)
+            }
+            public var _mockMode: MockMode = .strict
+
+            public init(mode: MockMode = .strict) {
+                _mockMode = mode
+            }
+
+            public func add(_ item: Item) {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "add", args: [item], matchMode: matchMode)
+                _recorder.record(call)
+            }
+
+            public func get(at index: Int) -> Item? {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "get", args: [index], matchMode: matchMode)
+                _recorder.record(call)
+                return try! _mockGetStub(for: call, mockMode: _mockMode)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+@Test func testAssociatedTypeMultiple() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol Mapper {
+            associatedtype Input
+            associatedtype Output
+            func map(_ input: Input) -> Output
+        }
+        """,
+        expandedSource: """
+        protocol Mapper {
+            associatedtype Input
+            associatedtype Output
+            func map(_ input: Input) -> Output
+        }
+
+        public class MockMapper<Input, Output>: Mapper, Mockable {
+            public typealias Input = Input
+            public typealias Output = Output
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder {
+                CallRecorder.shared(for: _mockId)
+            }
+            public var _mockMode: MockMode = .strict
+
+            public init(mode: MockMode = .strict) {
+                _mockMode = mode
+            }
+
+            public func map(_ input: Input) -> Output {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "map", args: [input], matchMode: matchMode)
+                _recorder.record(call)
+                return try! _mockGetStub(for: call, mockMode: _mockMode)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+@Test func testAssociatedTypeWithConstraints() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol Sequence {
+            associatedtype Element where Element: Hashable
+            func forEach(_ body: (Element) -> Void)
+        }
+        """,
+        expandedSource: """
+        protocol Sequence {
+            associatedtype Element where Element: Hashable
+            func forEach(_ body: (Element) -> Void)
+        }
+
+        public class MockSequence<Element>: Sequence, Mockable where Element: Hashable {
+            public typealias Element = Element
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder {
+                CallRecorder.shared(for: _mockId)
+            }
+            public var _mockMode: MockMode = .strict
+
+            public init(mode: MockMode = .strict) {
+                _mockMode = mode
+            }
+
+            public func forEach(_ body: (Element) -> Void) {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "forEach", args: [body], matchMode: matchMode)
+                _recorder.record(call)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+// MARK: - Variadic Generics Tests (Swift 5.9+)
+
+@Test func testVariadicGenericMethodSimple() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol Processor {
+            func process<each T>(_ values: repeat each T) -> (repeat each T)
+        }
+        """,
+        expandedSource: """
+        protocol Processor {
+            func process<each T>(_ values: repeat each T) -> (repeat each T)
+        }
+
+        public class MockProcessor: Processor, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder { CallRecorder.shared(for: _mockId) }
+            public var _mockMode: MockMode = .strict
+
+            public init(mode: MockMode = .strict) { _mockMode = mode }
+
+            public func process<each T>(_ values: repeat each T) -> (repeat each T) {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "process", args: [], matchMode: matchMode)
+                _recorder.record(call)
+                return try! _mockGetStub(for: call, mockMode: _mockMode)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+@Test func testVariadicGenericMethodWithConstraints() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol Validator {
+            func validate<each T>(_ items: repeat each T) -> Bool where repeat each T: Equatable
+        }
+        """,
+        expandedSource: """
+        protocol Validator {
+            func validate<each T>(_ items: repeat each T) -> Bool where repeat each T: Equatable
+        }
+
+        public class MockValidator: Validator, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder { CallRecorder.shared(for: _mockId) }
+            public var _mockMode: MockMode = .strict
+
+            public init(mode: MockMode = .strict) { _mockMode = mode }
+
+            public func validate<each T>(_ items: repeat each T) -> Bool where repeat each T: Equatable {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "validate", args: [], matchMode: matchMode)
+                _recorder.record(call)
+                return try! _mockGetStub(for: call, mockMode: _mockMode)
+            }
+        }
+        """,
+        macros: testMacros
+    )
+}
+
+@Test func testVariadicGenericMethodMultiplePacks() {
+    assertMacroExpansion(
+        """
+        @Mockable
+        protocol Mapper {
+            func map<each Input, each Output>(_ inputs: repeat each Input) -> (repeat each Output)
+        }
+        """,
+        expandedSource: """
+        protocol Mapper {
+            func map<each Input, each Output>(_ inputs: repeat each Input) -> (repeat each Output)
+        }
+
+        public class MockMapper: Mapper, Mockable {
+            public let _mockId = UUID().uuidString
+            public var _recorder: CallRecorder { CallRecorder.shared(for: _mockId) }
+            public var _mockMode: MockMode = .strict
+
+            public init(mode: MockMode = .strict) { _mockMode = mode }
+
+            public func map<each Input, each Output>(_ inputs: repeat each Input) -> (repeat each Output) {
+                let matchers = MatcherRegistry.shared.extractMatchers()
+                let matchMode: MethodCall.MatchMode = matchers.isEmpty ? .exact : .matchers(matchers)
+                let call = MethodCall(mockId: _mockId, name: "map", args: [], matchMode: matchMode)
+                _recorder.record(call)
+                return try! _mockGetStub(for: call, mockMode: _mockMode)
             }
         }
         """,

@@ -18,6 +18,38 @@ public struct MockableMacro: PeerMacro {
         let protocolName = protocolDecl.name.text
         let mockClassName = "Mock\(protocolName)"
 
+        // Extract protocol-level generic parameters and constraints
+        let protocolGenerics = extractProtocolGenericParameters(from: protocolDecl)
+        let protocolWhereClause = extractProtocolWhereClause(from: protocolDecl)
+
+        // Extract associated types and convert to generic parameters
+        let associatedTypes = extractAssociatedTypes(from: protocolDecl)
+
+        // Determine final generic parameters (merge protocol generics with associated types)
+        let finalGenerics: String?
+        let finalWhereClause: String?
+
+        if !associatedTypes.isEmpty && protocolGenerics == nil {
+            // Convert associated types to generic parameters
+            let typeNames = associatedTypes.map { $0.name }
+            finalGenerics = "<\(typeNames.joined(separator: ", "))>"
+
+            // Merge where clauses from associated types
+            let assocWhereConstraints = associatedTypes.compactMap { $0.constraints }
+            if !assocWhereConstraints.isEmpty {
+                // Extract constraints without "where " prefix
+                let constraints = assocWhereConstraints.map { constraint in
+                    constraint.hasPrefix("where ") ? String(constraint.dropFirst(6)) : constraint
+                }
+                finalWhereClause = "where \(constraints.joined(separator: ", "))"
+            } else {
+                finalWhereClause = protocolWhereClause
+            }
+        } else {
+            finalGenerics = protocolGenerics
+            finalWhereClause = protocolWhereClause
+        }
+
         // Extract methods and properties from the protocol
         var mockMethods: [DeclSyntax] = []
         var mockProperties: [DeclSyntax] = []
@@ -32,15 +64,18 @@ public struct MockableMacro: PeerMacro {
             }
         }
 
-        // Generate the mock class
-        let mockClass = ClassDeclSyntax(
-            modifiers: [DeclModifierSyntax(name: .keyword(.public))],
-            name: .identifier(mockClassName),
-            inheritanceClause: InheritanceClauseSyntax {
-                InheritedTypeSyntax(type: IdentifierTypeSyntax(name: .identifier(protocolName)))
-                InheritedTypeSyntax(type: IdentifierTypeSyntax(name: .identifier("Mockable")))
-            }
-        ) {
+        // Build class declaration with generics
+        var classDeclaration = "public class \(mockClassName)"
+        if let generics = finalGenerics {
+            classDeclaration += generics
+        }
+        classDeclaration += ": \(protocolName), Mockable"
+        if let whereClause = finalWhereClause {
+            classDeclaration += " \(whereClause)"
+        }
+
+        // Generate the mock class using string literal approach for complex generic syntax
+        let mockClass = try ClassDeclSyntax("\(raw: classDeclaration)") {
             // Add internal infrastructure
             DeclSyntax("public let _mockId = UUID().uuidString")
             DeclSyntax("public var _recorder: CallRecorder { CallRecorder.shared(for: _mockId) }")
@@ -48,6 +83,11 @@ public struct MockableMacro: PeerMacro {
             DeclSyntax("")
             DeclSyntax("public init(mode: MockMode = .strict) { _mockMode = mode }")
             DeclSyntax("")
+
+            // Add typealias declarations for associated types
+            for (name, _) in associatedTypes {
+                DeclSyntax("public typealias \(raw: name) = \(raw: name)")
+            }
 
             // Add all mock properties
             for property in mockProperties {
@@ -84,6 +124,68 @@ public struct MockableMacro: PeerMacro {
         return (true, "")
     }
 
+    /// Extract generic parameter clause from a function declaration
+    private static func extractGenericParameters(
+        from funcDecl: FunctionDeclSyntax
+    ) -> String? {
+        guard let genericParams = funcDecl.genericParameterClause else {
+            return nil
+        }
+        return genericParams.trimmedDescription
+    }
+
+    /// Extract generic where clause from a function declaration
+    private static func extractGenericWhereClause(
+        from funcDecl: FunctionDeclSyntax
+    ) -> String? {
+        guard let whereClause = funcDecl.genericWhereClause else {
+            return nil
+        }
+        return whereClause.trimmedDescription
+    }
+
+    /// Extract generic parameter clause from a protocol declaration
+    /// Converts primary associated types to generic parameters
+    private static func extractProtocolGenericParameters(
+        from protocolDecl: ProtocolDeclSyntax
+    ) -> String? {
+        // Primary associated types (Swift 5.7+)
+        if let primaryAssociatedTypes = protocolDecl.primaryAssociatedTypeClause {
+            let typeNames = primaryAssociatedTypes.primaryAssociatedTypes.map { $0.name.text }
+            return "<\(typeNames.joined(separator: ", "))>"
+        }
+
+        return nil
+    }
+
+    /// Extract where clause from protocol declaration
+    private static func extractProtocolWhereClause(
+        from protocolDecl: ProtocolDeclSyntax
+    ) -> String? {
+        guard let whereClause = protocolDecl.genericWhereClause else {
+            return nil
+        }
+        return whereClause.trimmedDescription
+    }
+
+    /// Extract associated type declarations from protocol
+    /// Returns list of (name, constraints) tuples
+    private static func extractAssociatedTypes(
+        from protocolDecl: ProtocolDeclSyntax
+    ) -> [(name: String, constraints: String?)] {
+        var associatedTypes: [(String, String?)] = []
+
+        for member in protocolDecl.memberBlock.members {
+            if let assocType = member.decl.as(AssociatedTypeDeclSyntax.self) {
+                let name = assocType.name.text
+                let constraints = assocType.genericWhereClause?.trimmedDescription
+                associatedTypes.append((name, constraints))
+            }
+        }
+
+        return associatedTypes
+    }
+
     /// Generate a mock implementation for a protocol method
     private static func generateMockMethod(for funcDecl: FunctionDeclSyntax) throws -> DeclSyntax {
         let funcName = funcDecl.name.text
@@ -97,15 +199,29 @@ public struct MockableMacro: PeerMacro {
         let params = funcDecl.signature.parameterClause.parameters
 
         // Build the argument array for recording
-        let argNames = params.map { param -> String in
+        let argElements = params.compactMap { param -> String? in
             let argName = param.secondName?.text ?? param.firstName.text
-            return argName
+            let typeDesc = param.type.trimmedDescription
+
+            // Check if this is a variadic parameter pack (contains "repeat each")
+            if typeDesc.contains("repeat each") {
+                // Parameter packs can't be easily type-erased to [Any]
+                // Skip them in argument recording - verification will work by method name
+                return nil
+            } else {
+                return argName
+            }
         }
 
-        let argsArrayLiteral = argNames.isEmpty ? "[]" : "[\(argNames.joined(separator: ", "))]"
+        let argsArrayLiteral = argElements.isEmpty ? "[]" : "[\(argElements.joined(separator: ", "))]"
 
         // Build the method signature
         var methodSignature = "public func \(funcName)"
+
+        // Add generic parameters if present
+        if let genericParams = extractGenericParameters(from: funcDecl) {
+            methodSignature += genericParams
+        }
 
         let paramStrings = params.map { param -> String in
             let firstName = param.firstName.text
@@ -129,6 +245,11 @@ public struct MockableMacro: PeerMacro {
             methodSignature += " -> \(returnType.trimmedDescription)"
         }
 
+        // Add where clause if present (MUST come after return type)
+        if let whereClause = extractGenericWhereClause(from: funcDecl) {
+            methodSignature += " \(whereClause)"
+        }
+
         // Build the method body - use wrapper functions that handle mode checking
         var methodBody = """
         {
@@ -147,7 +268,11 @@ public struct MockableMacro: PeerMacro {
             if isAsync && isThrowing {
                 // Async throwing method
                 if hasTypedThrows {
-                    methodBody += "\n    return try await _mockGetTypedAsyncStub(for: call, mockMode: _mockMode, errorType: \(errorTypeName).self)"
+                    methodBody += """
+
+                        return try await _mockGetTypedAsyncStub(
+                            for: call, mockMode: _mockMode, errorType: \(errorTypeName).self)
+                    """
                 } else {
                     methodBody += "\n    return try await _mockGetAsyncStub(for: call, mockMode: _mockMode)"
                 }
@@ -157,7 +282,11 @@ public struct MockableMacro: PeerMacro {
             } else if isThrowing {
                 // Sync throwing method
                 if hasTypedThrows {
-                    methodBody += "\n    return try _mockGetTypedStub(for: call, mockMode: _mockMode, errorType: \(errorTypeName).self)"
+                    methodBody += """
+
+                        return try _mockGetTypedStub(
+                            for: call, mockMode: _mockMode, errorType: \(errorTypeName).self)
+                    """
                 } else {
                     methodBody += "\n    return try _mockGetStub(for: call, mockMode: _mockMode)"
                 }
@@ -223,6 +352,7 @@ public struct MockableMacro: PeerMacro {
 
             // Generate the property with getter and optionally setter
             if isGetSet {
+                // swiftlint:disable:next line_length
                 let property = DeclSyntax(stringLiteral: """
                 public var \(propertyName): \(propertyType) {
                     get {
@@ -247,6 +377,7 @@ public struct MockableMacro: PeerMacro {
                 properties.append(property)
             } else {
                 // Get-only property
+                // swiftlint:disable:next line_length
                 let property = DeclSyntax(stringLiteral: """
                 public var \(propertyName): \(propertyType) {
                     get {
