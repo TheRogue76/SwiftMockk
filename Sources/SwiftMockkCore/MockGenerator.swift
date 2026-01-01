@@ -123,7 +123,6 @@ public struct MockGenerator {
         output += "    }\n"
         output += "}()\n\n"
 
-
         // Generate a public bootstrap function for explicit registration
         output += "/// Call this to ensure all mocks are registered before using mockk().\n"
         output += "/// Required when using mockk() in stored property initializers.\n"
