@@ -1,21 +1,24 @@
 // swiftlint:disable force_cast
 // SwiftMockk - A Swift mocking library inspired by Kotlin's mockk
-
-/// Macro that generates a mock implementation for a protocol
-///
-/// Apply this macro to a protocol to automatically generate a `Mock{ProtocolName}` class
-/// that implements the protocol and provides stubbing and verification capabilities.
-///
-/// Example:
-/// ```swift
-/// @Mockable
-/// protocol UserService {
-///     func fetchUser(id: String) -> User
-/// }
-/// // Generates: class MockUserService: UserService { ... }
-/// ```
-@attached(peer, names: prefixed(Mock))
-public macro Mockable() = #externalMacro(module: "SwiftMockkMacros", type: "MockableMacro")
+//
+// To generate mocks, mark your protocols with `// swiftmockk:generate` comment
+// and add the SwiftMockkGeneratorPlugin to your test target.
+//
+// Example:
+// ```swift
+// // In your main target (no SwiftMockk import needed):
+// // swiftmockk:generate
+// protocol UserService {
+//     func fetchUser(id: String) -> User
+// }
+//
+// // In your test target Package.swift:
+// .testTarget(
+//     name: "MyAppTests",
+//     dependencies: ["MyApp", "SwiftMockk"],
+//     plugins: [.plugin(name: "SwiftMockkGeneratorPlugin", package: "SwiftMockk")]
+// )
+// ```
 
 /// Internal dummy value provider - only handles safe primitive types
 private func _mockDummyValue<T>() throws -> T {
@@ -179,4 +182,61 @@ public func _mockExecuteTypedThrowingStub<E: Error>(for call: MethodCall, errorT
     } catch {
         throw error as! E
     }
+}
+
+// MARK: - mockk Factory Functions
+
+/// Creates a mock instance using Kotlin mockk-style API.
+///
+/// This function looks up a registered mock factory for the given protocol type
+/// and creates a new mock instance. Mocks are automatically registered when the
+/// generated mock code is loaded.
+///
+/// Example:
+/// ```swift
+/// let mock = mockk(UserService.self)
+/// let relaxedMock = mockk(UserService.self, mode: .relaxed)
+///
+/// await every { try await mock.fetchUser(id: "123") }.returns(testUser)
+/// ```
+///
+/// - Parameters:
+///   - protocolType: The protocol type to create a mock for (e.g., `UserService.self`)
+///   - mode: The mock mode (strict or relaxed). Defaults to `.strict`
+/// - Returns: A mock instance that conforms to the protocol
+/// - Note: This function will crash if no mock is registered for the protocol.
+///         Use `tryMockk()` for error handling instead.
+/// - Important: Generic protocols (those with associated types or type parameters)
+///              cannot use `mockk()`. Use direct instantiation instead:
+///              `MockRepository<User>()`.
+public func mockk<T>(_ protocolType: T.Type, mode: MockMode = .strict) -> T {
+    do {
+        return try MockRegistry.shared.create(protocolType, mode: mode)
+    } catch {
+        fatalError("\(error)")
+    }
+}
+
+/// Creates a mock instance with error handling.
+///
+/// This is the throwing variant of `mockk()` that returns an error instead of
+/// crashing when no mock is registered.
+///
+/// Example:
+/// ```swift
+/// do {
+///     let mock = try tryMockk(UserService.self)
+/// } catch MockRegistryError.notRegistered(let name) {
+///     print("No mock registered for \(name)")
+/// }
+/// ```
+///
+/// - Parameters:
+///   - protocolType: The protocol type to create a mock for
+///   - mode: The mock mode (strict or relaxed). Defaults to `.strict`
+/// - Returns: A mock instance that conforms to the protocol
+/// - Throws: `MockRegistryError.notRegistered` if no mock is registered,
+///           `MockRegistryError.typeMismatch` if the mock type doesn't match
+public func tryMockk<T>(_ protocolType: T.Type, mode: MockMode = .strict) throws -> T {
+    try MockRegistry.shared.create(protocolType, mode: mode)
 }

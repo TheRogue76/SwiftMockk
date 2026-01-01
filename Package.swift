@@ -2,47 +2,84 @@
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
-import CompilerPluginSupport
 
 let package = Package(
     name: "SwiftMockk",
     platforms: [.macOS(.v12), .iOS(.v13)],
     products: [
-        // Products define the executables and libraries a package produces, making them visible to other packages.
+        // Main library for runtime support
         .library(
             name: "SwiftMockk",
             targets: ["SwiftMockk"]
         ),
+        // Build tool plugin for generating mocks from marked protocols
+        .plugin(
+            name: "SwiftMockkGeneratorPlugin",
+            targets: ["SwiftMockkGeneratorPlugin"]
+        ),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-syntax", from: "600.0.0")
+        .package(url: "https://github.com/apple/swift-syntax", from: "600.0.0"),
+        .package(url: "https://github.com/apple/swift-argument-parser", from: "1.2.0"),
     ],
     targets: [
-        // Macro implementation target
-        .macro(
-            name: "SwiftMockkMacros",
+        // MARK: - Core Module (shared code generation logic)
+
+        .target(
+            name: "SwiftMockkCore",
             dependencies: [
-                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
-                .product(name: "SwiftCompilerPlugin", package: "swift-syntax")
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftParser", package: "swift-syntax"),
             ]
         ),
 
-        // Main library target
+        // MARK: - Main Library (runtime support only, no macros)
+
         .target(
-            name: "SwiftMockk",
-            dependencies: ["SwiftMockkMacros"]
+            name: "SwiftMockk"
         ),
 
-        // Test targets
+        // MARK: - Generator Executable
+
+        .executableTarget(
+            name: "SwiftMockkGenerator",
+            dependencies: [
+                "SwiftMockkCore",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftParser", package: "swift-syntax"),
+            ]
+        ),
+
+        // MARK: - Build Tool Plugin
+
+        .plugin(
+            name: "SwiftMockkGeneratorPlugin",
+            capability: .buildTool(),
+            dependencies: ["SwiftMockkGenerator"]
+        ),
+
+        // MARK: - Test Targets
+
         .testTarget(
             name: "SwiftMockkTests",
-            dependencies: ["SwiftMockk"]
+            dependencies: ["SwiftMockk"],
+            plugins: [.plugin(name: "SwiftMockkGeneratorPlugin")]
         ),
         .testTarget(
-            name: "SwiftMockkMacrosTests",
+            name: "SwiftMockkCoreTests",
             dependencies: [
-                "SwiftMockkMacros",
-                .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax")
+                "SwiftMockkCore",
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftParser", package: "swift-syntax"),
+            ]
+        ),
+        .testTarget(
+            name: "SwiftMockkGeneratorTests",
+            dependencies: [
+                "SwiftMockkCore",
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftParser", package: "swift-syntax"),
             ]
         ),
     ]

@@ -4,14 +4,14 @@ import Foundation
 
 // MARK: - Test Protocols
 
-@Mockable
+// swiftmockk:generate
 protocol UserService {
     func fetchUser(id: String) async throws -> User
     func deleteUser(id: String) async throws
     func updateUser(_ user: User) async throws -> User
 }
 
-@Mockable
+// swiftmockk:generate
 protocol SimpleCalculator {
     func add(a: Int, b: Int) -> Int
     func divide(a: Int, b: Int) throws -> Int
@@ -266,7 +266,7 @@ enum CalculatorError: Error {
 
 // MARK: - Property Tests
 
-@Mockable
+// swiftmockk:generate
 protocol ServiceWithProperties {
     var name: String { get set }
     var count: Int { get }
@@ -350,7 +350,7 @@ protocol ServiceWithProperties {
 
 // MARK: - Relaxed Mock Tests
 
-@Mockable
+// swiftmockk:generate
 protocol CalculatorService {
     func add(a: Int, b: Int) -> Int
     func getName() -> String
@@ -392,7 +392,7 @@ public enum NetworkError: Error, Equatable {
     case serverError
 }
 
-@Mockable
+// swiftmockk:generate
 public protocol NetworkService {
     func fetch(url: String) -> Result<Data, NetworkError>
     func upload(data: Data) async -> Result<Void, NetworkError>
@@ -462,7 +462,7 @@ public enum UserError: Error, Equatable {
     case permissionDenied
 }
 
-@Mockable
+// swiftmockk:generate
 public protocol TypedThrowsService {
     func getUser(id: String) throws(UserError) -> User
     func fetchUsers() async throws(UserError) -> [User]
@@ -534,7 +534,7 @@ public protocol TypedThrowsService {
 
 // MARK: - Generic Method Tests
 
-@Mockable
+// swiftmockk:generate
 protocol GenericRepository {
     func fetch<T: Decodable>() async throws -> T
     func save<T: Encodable>(_ item: T) async throws
@@ -595,7 +595,7 @@ protocol GenericRepository {
 
 // MARK: - Generic Protocol Tests
 
-@Mockable
+// swiftmockk:generate
 protocol GenericUserRepository {
     associatedtype User
     func fetch(id: String) async throws -> User
@@ -636,7 +636,7 @@ protocol GenericUserRepository {
 
 // MARK: - Associated Type Tests
 
-@Mockable
+// swiftmockk:generate
 protocol AssociatedTypeContainer {
     associatedtype Item
     func add(_ item: Item)
@@ -652,7 +652,7 @@ protocol AssociatedTypeContainer {
     #expect(result == ["Hello", "World"])
 }
 
-@Mockable
+// swiftmockk:generate
 protocol AssociatedTypeMapper {
     associatedtype Input
     associatedtype Output
@@ -670,7 +670,7 @@ protocol AssociatedTypeMapper {
 
 // MARK: - Variadic Generics Tests (Swift 5.9+)
 
-@Mockable
+// swiftmockk:generate
 protocol VariadicProcessor {
     func process<each T>(_ values: repeat each T) -> (repeat each T)
 }
@@ -687,7 +687,7 @@ protocol VariadicProcessor {
     #expect(result.2 == true)
 }
 
-@Mockable
+// swiftmockk:generate
 protocol VariadicValidator {
     func validate<each T>(_ items: repeat each T) -> Bool where repeat each T: Equatable
 }
@@ -700,4 +700,124 @@ protocol VariadicValidator {
 
     let result = mock.validate("test", 123)
     #expect(result == true)
+}
+
+// MARK: - mockk() Factory Function Tests
+
+// Ensure mocks are registered before mockk() tests run.
+// This is needed because mockk() relies on prior registration.
+private func ensureAllMocksRegistered() {
+    // Instantiating any mock triggers _autoRegister, which registers all mocks
+    _ = MockUserService()
+}
+
+@Test func testMockkCreatesStrictMockByDefault() async throws {
+    ensureAllMocksRegistered()
+
+    // Create mock using mockk()
+    let mock = mockk(SimpleCalculator.self)
+
+    // Stub and verify it works
+    await every { mock.add(a: 2, b: 3) }.returns(5)
+
+    let result = mock.add(a: 2, b: 3)
+    #expect(result == 5)
+
+    await verify { mock.add(a: 2, b: 3) }
+}
+
+@Test func testMockkWithRelaxedMode() async throws {
+    ensureAllMocksRegistered()
+
+    // Create relaxed mock using mockk()
+    let mock = mockk(CalculatorService.self, mode: .relaxed)
+
+    // Unstubbed calls should return default values
+    let result = mock.add(a: 5, b: 10)
+    let name = mock.getName()
+    let ready = mock.isReady()
+
+    #expect(result == 0)
+    #expect(name == "")
+    #expect(ready == false)
+}
+
+@Test func testMockkWithStubbing() async throws {
+    ensureAllMocksRegistered()
+
+    // Create mock using mockk()
+    let mock = mockk(UserService.self)
+    let expectedUser = User(id: "123", name: "Alice")
+
+    // Stub the method
+    try await every { try await mock.fetchUser(id: "123") }.returns(expectedUser)
+
+    // Call the mock
+    let user = try await mock.fetchUser(id: "123")
+
+    #expect(user == expectedUser)
+}
+
+// This protocol has no generation marker and should NOT have a mock generated
+protocol ProtocolWithoutMockGeneration {
+    func doSomething()
+}
+
+@Test func testTryMockkThrowsForUnregisteredProtocol() async throws {
+    // This protocol was intentionally not marked for mock generation
+    // so tryMockk should throw an error
+
+    // Check that the protocol is not registered
+    #expect(!MockRegistry.shared.isRegistered(ProtocolWithoutMockGeneration.self))
+
+    // tryMockk should throw for this unregistered protocol
+    #expect(throws: MockRegistryError.self) {
+        let _: ProtocolWithoutMockGeneration = try tryMockk(ProtocolWithoutMockGeneration.self)
+    }
+}
+
+@Test func testMockkMultipleMocksIndependent() async throws {
+    ensureAllMocksRegistered()
+
+    // Create two mocks of the same type
+    let mock1 = mockk(SimpleCalculator.self)
+    let mock2 = mockk(SimpleCalculator.self)
+
+    // Stub them differently
+    await every { mock1.add(a: 1, b: 2) }.returns(100)
+    await every { mock2.add(a: 1, b: 2) }.returns(200)
+
+    // They should return different values
+    #expect(mock1.add(a: 1, b: 2) == 100)
+    #expect(mock2.add(a: 1, b: 2) == 200)
+}
+
+@Test func testMockkRegistrationIsIdempotent() async throws {
+    ensureAllMocksRegistered()
+
+    // Multiple ensureRegistered calls should work
+    MockSimpleCalculator.ensureRegistered()
+    MockSimpleCalculator.ensureRegistered()
+
+    // mockk should still work
+    let mock = mockk(SimpleCalculator.self)
+
+    await every { mock.add(a: 1, b: 1) }.returns(2)
+    #expect(mock.add(a: 1, b: 1) == 2)
+}
+
+@Test func testMockkWithAsyncMethods() async throws {
+    ensureAllMocksRegistered()
+
+    let mock = mockk(UserService.self)
+    let testUser = User(id: "1", name: "Test")
+
+    try await every { try await mock.fetchUser(id: any()) }.returns(testUser)
+    try await every { try await mock.deleteUser(id: any()) }.returns(())
+
+    let user = try await mock.fetchUser(id: "123")
+    #expect(user == testUser)
+
+    try await mock.deleteUser(id: "123")
+    try await verify { try await mock.deleteUser(id: any()) }
 }

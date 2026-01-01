@@ -9,25 +9,25 @@ A Swift mocking library inspired by Kotlin's [mockk](https://mockk.io/), providi
 
 ## Features
 
-- ✅ **Macro-based mock generation** - Automatic mock class generation from protocols using Swift macros
-- ✅ **Intuitive DSL** - `every { }` and `verify { }` syntax inspired by mockk
-- ✅ **Argument matching** - Flexible matchers including `any()`, `eq()`, and custom predicates
-- ✅ **Async/await support** - Full support for Swift's async/await patterns
-- ✅ **Type-safe** - Compile-time type checking for all mock interactions
-- ✅ **Verification modes** - `exactly`, `atLeast`, `atMost` call count verification
-- ✅ **Property mocking** - Full support for both get and get/set properties
-- ✅ **Order verification** - Verify calls happened in a specific order with `verifyOrder()` and `verifySequence()`
-- ✅ **Relaxed mocks** - Optional mode that returns default values for unstubbed methods
-- ✅ **Result type support** - Convenience methods for stubbing `Result<Success, Failure>` return types
-- ✅ **Typed throws support** - Full support for Swift 6's typed throws syntax `throws(ErrorType)`
-- ✅ **Generics support** - Full support for generic methods, generic protocols, and associated types
+- **Test-target only dependency** - No need to add SwiftMockk to your main target
+- **Build-phase mock generation** - Automatic mock class generation using SPM build tool plugin
+- **Intuitive DSL** - `every { }` and `verify { }` syntax inspired by mockk
+- **Argument matching** - Flexible matchers including `any()`, `eq()`, and custom predicates
+- **Async/await support** - Full support for Swift's async/await patterns
+- **Type-safe** - Compile-time type checking for all mock interactions
+- **Verification modes** - `exactly`, `atLeast`, `atMost` call count verification
+- **Property mocking** - Full support for both get and get/set properties
+- **Order verification** - Verify calls happened in a specific order with `verifyOrder()` and `verifySequence()`
+- **Relaxed mocks** - Optional mode that returns default values for unstubbed methods
+- **Result type support** - Convenience methods for stubbing `Result<Success, Failure>` return types
+- **Typed throws support** - Full support for Swift 6's typed throws syntax `throws(ErrorType)`
+- **Generics support** - Full support for generic methods, generic protocols, and associated types
+- **Kotlin-style mockk() function** - Create mocks using `mockk(Protocol.self)` syntax
 
 ## Requirements
 
 - Swift 6.0+
 - macOS 12+ / iOS 13+
-- Disabling Explicitly Built Modules in Build settings (Current limitation, in the list of items to address)
-- Enable Testing Search paths for your main target needs to be enabled in Build settings (As the mock is generated on the main target, to be explored if this can be improved and remove this requirement)
 
 ## Installation
 
@@ -38,19 +38,28 @@ dependencies: [
     .package(url: "https://github.com/TheRogue76/SwiftMockk", from: "<version>")
 ],
 targets: [
+    .target(
+        name: "YourApp",
+        dependencies: []  // No SwiftMockk dependency needed in main target!
+    ),
     .testTarget(
-        name: "YourTests",
-        dependencies: ["SwiftMockk"]
+        name: "YourAppTests",
+        dependencies: ["YourApp", "SwiftMockk"],
+        plugins: [.plugin(name: "SwiftMockkGeneratorPlugin", package: "SwiftMockk")]
     )
 ]
 ```
 
 ## Usage
 
-### 1. Define Your Protocol
+### 1. Mark Your Protocol
+
+In your main target, mark protocols with the `// swiftmockk:generate` comment. **No imports needed!**
 
 ```swift
-@Mockable
+// UserService.swift (in your main target)
+
+// swiftmockk:generate
 protocol UserService {
     func fetchUser(id: String) async throws -> User
     func deleteUser(id: String) async throws
@@ -58,9 +67,116 @@ protocol UserService {
 }
 ```
 
-The `@Mockable` macro automatically generates a `MockUserService` class.
+The build tool plugin automatically scans for marked protocols and generates a `MockUserService` class during compilation.
 
-### 2. Stub Method Calls
+### 2. Create Mocks
+
+You can create mocks in two ways:
+
+#### Option A: Kotlin-style `mockk()` function (Recommended)
+
+```swift
+import Testing
+@testable import YourModule
+import SwiftMockk
+
+@Test func testWithMockk() async throws {
+    // Create mock using mockk() - similar to Kotlin
+    let mock = mockk(UserService.self)
+
+    // Create relaxed mock
+    let relaxedMock = mockk(UserService.self, mode: .relaxed)
+
+    // Use as normal
+    await every { try await mock.fetchUser(id: "123") }.returns(expectedUser)
+}
+```
+
+**Note**: The first time you instantiate any mock (using `mockk()` or direct instantiation), all mocks in that file are automatically registered with the registry.
+
+#### Option B: Direct instantiation
+
+```swift
+let mock = MockUserService()
+let relaxedMock = MockUserService(mode: .relaxed)
+```
+
+Both approaches work identically. The `mockk()` function provides a more Kotlin-like API.
+
+**Error Handling**: If you need to handle registration errors, use `tryMockk()`:
+
+```swift
+do {
+    let mock = try tryMockk(UserService.self)
+} catch MockRegistryError.notRegistered(let name) {
+    // Handle missing mock registration
+}
+```
+
+**Limitation**: Generic protocols (those with associated types) cannot use `mockk()`. Use direct instantiation instead:
+```swift
+// For generic protocols, use direct instantiation:
+let repo = MockRepository<User>()  // Works
+// mockk(Repository<User>.self)    // Won't work
+```
+
+#### Important: Using mockk() with Stored Property Initializers
+
+Due to Swift's lazy evaluation of file-level constants, `mockk()` requires special handling when used as a stored property initializer (before any mock has been instantiated):
+
+```swift
+// ❌ This will crash - mockk() called before any mock is instantiated
+final class MyTests: XCTestCase {
+    let mock: UserService = mockk(UserService.self)  // Crashes!
+}
+```
+
+**Solutions:**
+
+**Option 1: Call `_swiftMockkBootstrap()` in class setUp (Recommended for XCTest)**
+```swift
+final class MyTests: XCTestCase {
+    var mock: UserService!  // Change to var
+
+    override class func setUp() {
+        super.setUp()
+        _swiftMockkBootstrap()  // Triggers mock registration
+    }
+
+    override func setUp() {
+        super.setUp()
+        mock = mockk(UserService.self)  // Now works!
+    }
+}
+```
+
+**Option 2: Use direct instantiation**
+```swift
+final class MyTests: XCTestCase {
+    let mock: UserService = MockUserService()  // Always works
+}
+```
+
+**Option 3: Use lazy var**
+```swift
+final class MyTests: XCTestCase {
+    lazy var mock: UserService = mockk(UserService.self)
+
+    override func setUp() {
+        super.setUp()
+        _ = mock  // Accessing lazy var triggers registration
+    }
+}
+```
+
+**Why this happens**: Swift evaluates file-level constants lazily. The mock registration code only runs when a mock is first instantiated. When `mockk()` is called as a stored property initializer, no mock has been instantiated yet, so the registry is empty.
+
+**When mockk() works without workarounds**:
+- When called inside test methods (after setUp has run)
+- When called after any mock has been directly instantiated
+- In Swift Testing `@Test` functions (they run after module initialization)
+
+### 3. Stub Method Calls
 
 ```swift
 import Testing
@@ -68,12 +184,12 @@ import Testing
 import SwiftMockk
 
 @Test func testBasicStubbing() async throws {
-    let mock = MockUserService()
+    let mock = mockk(UserService.self)
 
     let expectedUser = User(id: "123", name: "Alice")
 
     // Stub the method
-    try await every { try await mock.fetchUser(id: "123") }.returns(expectedUser)
+    await every { try await mock.fetchUser(id: "123") }.returns(expectedUser)
 
     // Call the mock
     let user = try await mock.fetchUser(id: "123")
@@ -91,13 +207,13 @@ import SwiftMockk
     let mock = MockUserService()
 
     // Stub
-    try await every { try await mock.fetchUser(id: "123") }.returns(User(id: "123", name: "Alice"))
+    await every { try await mock.fetchUser(id: "123") }.returns(User(id: "123", name: "Alice"))
 
     // Call the method
     _ = try await mock.fetchUser(id: "123")
 
     // Verify it was called
-    try await verify { try await mock.fetchUser(id: "123") }
+    await verify { try await mock.fetchUser(id: "123") }
 }
 ```
 
@@ -112,7 +228,7 @@ SwiftMockk provides flexible argument matching:
     let defaultUser = User(id: "0", name: "Default")
 
     // Stub with any() matcher
-    try await every { try await mock.fetchUser(id: any()) }.returns(defaultUser)
+    await every { try await mock.fetchUser(id: any()) }.returns(defaultUser)
 
     // Call with different IDs
     let user1 = try await mock.fetchUser(id: "123")
@@ -131,7 +247,7 @@ SwiftMockk provides flexible argument matching:
     let longIdUser = User(id: "long", name: "Long ID User")
 
     // Stub with custom matcher - only match IDs longer than 5 characters
-    try await every {
+    await every {
         try await mock.fetchUser(id: match { $0.count > 5 })
     }.returns(longIdUser)
 
@@ -147,30 +263,30 @@ SwiftMockk provides flexible argument matching:
 @Test func testVerificationExactly() async throws {
     let mock = MockUserService()
 
-    try await every { try await mock.fetchUser(id: any()) }.returns(User(id: "0", name: "Default"))
+    await every { try await mock.fetchUser(id: any()) }.returns(User(id: "0", name: "Default"))
 
     // Call exactly twice
     _ = try await mock.fetchUser(id: "123")
     _ = try await mock.fetchUser(id: "456")
 
     // Verify exactly 2
-    try await verify(times: .exactly(2)) { try await mock.fetchUser(id: any()) }
+    await verify(times: .exactly(2)) { try await mock.fetchUser(id: any()) }
 }
 
 @Test func testVerificationAtLeast() async throws {
     let mock = MockUserService()
 
-    try await every { try await mock.fetchUser(id: any()) }.returns(User(id: "0", name: "Default"))
+    await every { try await mock.fetchUser(id: any()) }.returns(User(id: "0", name: "Default"))
 
     // Call twice
     _ = try await mock.fetchUser(id: "123")
     _ = try await mock.fetchUser(id: "456")
 
     // Verify at least once
-    try await verify(times: .atLeast(1)) { try await mock.fetchUser(id: any()) }
+    await verify(times: .atLeast(1)) { try await mock.fetchUser(id: any()) }
 
     // Verify at least twice
-    try await verify(times: .atLeast(2)) { try await mock.fetchUser(id: any()) }
+    await verify(times: .atLeast(2)) { try await mock.fetchUser(id: any()) }
 }
 ```
 
@@ -183,7 +299,7 @@ SwiftMockk provides flexible argument matching:
     let expectedUser = User(id: "123", name: "Alice")
 
     // Stub the method
-    try await every { try await mock.fetchUser(id: "123") }.returns(expectedUser)
+    await every { try await mock.fetchUser(id: "123") }.returns(expectedUser)
 
     // Call the mock
     let user = try await mock.fetchUser(id: "123")
@@ -197,7 +313,7 @@ SwiftMockk provides flexible argument matching:
     let mock = MockUserService()
 
     // Stub to throw an error
-    try await every { try await mock.deleteUser(id: any()) }.throws(CalculatorError.divisionByZero)
+    await every { try await mock.deleteUser(id: any()) }.throws(ServiceError.notFound)
 
     // Verify it throws
     do {
@@ -205,7 +321,7 @@ SwiftMockk provides flexible argument matching:
         Issue.record("Expected method to throw")
     } catch {
         // Expected
-        #expect(error is CalculatorError)
+        #expect(error is ServiceError)
     }
 }
 ```
@@ -214,26 +330,27 @@ SwiftMockk provides flexible argument matching:
 
 | Feature | Kotlin mockk | SwiftMockk |
 |---------|-------------|------------|
-| Mock creation | `mockk<Service>()` | `@Mockable` + `MockService()` |
+| Mock creation | `mockk<Service>()` | `mockk(Service.self)` or `MockService()` |
 | Stubbing | `every { mock.method() } returns value` | `await every { await mock.method() }.returns(value)` |
 | Verification | `verify { mock.method() }` | `await verify { await mock.method() }` |
 | Async stubbing | `coEvery { mock.method() } returns value` | Same as stubbing (unified API) |
 | Matchers | `any()`, `eq()`, `match {}` | `any()`, `eq()`, `match {}` |
 | Call count | `verify(exactly = 2) { }` | `verify(times: .exactly(2)) { }` |
+| Relaxed mocks | `mockk(relaxed = true)` | `mockk(Service.self, mode: .relaxed)` |
 
 ## Differences from Kotlin mockk
 
 Due to Swift's language design and concurrency model, SwiftMockk has some differences:
 
 1. **Async by default**: All DSL functions (`every`, `verify`) are async in SwiftMockk because Swift's actor-based concurrency requires async access
-2. **Macro-based**: Swift uses compile-time macros instead of runtime bytecode manipulation
+2. **Build-phase generation**: Swift uses build-phase code generation instead of runtime bytecode manipulation
 3. **Protocol-only**: Can only mock protocols, not classes (Swift limitation)
 4. **Explicit await**: Swift requires explicit `await` keywords for async operations
 
 ### 7. Property Mocking
 
 ```swift
-@Mockable
+// swiftmockk:generate
 protocol ServiceWithProperties {
     var name: String { get set }
     var count: Int { get }
@@ -243,14 +360,14 @@ protocol ServiceWithProperties {
     let mock = MockServiceWithProperties()
 
     // Stub property getter
-    try await every { mock.name }.returns("TestName")
+    await every { mock.name }.returns("TestName")
 
     // Get property
     let name = mock.name
 
     // Verify
     #expect(name == "TestName")
-    try await verify { mock.name }
+    await verify { mock.name }
 }
 
 @Test func testPropertySetter() async throws {
@@ -260,14 +377,14 @@ protocol ServiceWithProperties {
     mock.name = "NewName"
 
     // Verify setter was called
-    try await verify { mock.name = "NewName" }
+    await verify { mock.name = "NewName" }
 }
 
 @Test func testReadOnlyProperty() async throws {
     let mock = MockServiceWithProperties()
 
     // Stub read-only property
-    try await every { mock.count }.returns(42)
+    await every { mock.count }.returns(42)
 
     // Get property
     let count = mock.count
@@ -284,8 +401,8 @@ protocol ServiceWithProperties {
     let mock = MockUserService()
 
     // Stub
-    try await every { try await mock.fetchUser(id: any()) }.returns(User(id: "0", name: "Default"))
-    try await every { try await mock.deleteUser(id: any()) }.returns(())
+    await every { try await mock.fetchUser(id: any()) }.returns(User(id: "0", name: "Default"))
+    await every { try await mock.deleteUser(id: any()) }.returns(())
 
     // Call in order: fetch, delete, fetch
     _ = try await mock.fetchUser(id: "1")
@@ -293,7 +410,7 @@ protocol ServiceWithProperties {
     _ = try await mock.fetchUser(id: "2")
 
     // Verify order (non-consecutive)
-    try await verifyOrder {
+    await verifyOrder {
         try await mock.fetchUser(id: any())
         try await mock.deleteUser(id: any())
     }
@@ -303,15 +420,15 @@ protocol ServiceWithProperties {
     let mock = MockUserService()
 
     // Stub
-    try await every { try await mock.fetchUser(id: any()) }.returns(User(id: "0", name: "Default"))
-    try await every { try await mock.deleteUser(id: any()) }.returns(())
+    await every { try await mock.fetchUser(id: any()) }.returns(User(id: "0", name: "Default"))
+    await every { try await mock.deleteUser(id: any()) }.returns(())
 
     // Call in sequence: fetch, delete
     _ = try await mock.fetchUser(id: "1")
     try await mock.deleteUser(id: "1")
 
     // Verify exact consecutive sequence
-    try await verifySequence {
+    await verifySequence {
         try await mock.fetchUser(id: "1")
         try await mock.deleteUser(id: "1")
     }
@@ -321,7 +438,7 @@ protocol ServiceWithProperties {
 ### 9. Relaxed Mocks
 
 ```swift
-@Mockable
+// swiftmockk:generate
 protocol CalculatorService {
     func add(a: Int, b: Int) -> Int
     func getName() -> String
@@ -345,7 +462,7 @@ protocol CalculatorService {
 @Test func testRelaxedMockWithStubbing() async throws {
     let mock = MockCalculatorService(mode: .relaxed)
 
-    try await every { mock.add(a: 1, b: 2) }.returns(100)
+    await every { mock.add(a: 1, b: 2) }.returns(100)
 
     // Stubbed call returns stubbed value
     let stubbed = mock.add(a: 1, b: 2)
@@ -367,7 +484,7 @@ public enum NetworkError: Error, Equatable {
     case serverError
 }
 
-@Mockable
+// swiftmockk:generate
 public protocol NetworkService {
     func fetch(url: String) -> Result<Data, NetworkError>
 }
@@ -433,7 +550,7 @@ public enum UserError: Error, Equatable {
 }
 
 // Note: Swift 6+ typed throws syntax: throws(ErrorType)
-@Mockable
+// swiftmockk:generate
 public protocol UserService {
     func getUser(id: String) throws(UserError) -> User
     func fetchUsers() async throws(UserError) -> [User]
@@ -443,7 +560,7 @@ public protocol UserService {
     let mock = MockUserService()
 
     // Stub to throw a specific error type
-    try await every { try mock.getUser(id: any()) }.throws(UserError.notFound)
+    await every { try mock.getUser(id: any()) }.throws(UserError.notFound)
 
     do {
         _ = try mock.getUser(id: "123")
@@ -469,7 +586,7 @@ SwiftMockk provides comprehensive support for generics in protocols, including g
 Methods with type parameters are fully supported, including constraints and where clauses:
 
 ```swift
-@Mockable
+// swiftmockk:generate
 protocol DataRepository {
     func fetch<T: Decodable>() async throws -> T
     func save<T: Encodable>(_ item: T) async throws
@@ -487,7 +604,7 @@ protocol DataRepository {
     let testUser = User(id: "123", name: "Alice")
 
     // Stub with type inference
-    try await every { try await mock.fetch() as User }.returns(testUser)
+    await every { try await mock.fetch() as User }.returns(testUser)
 
     // Call with specific type
     let result: User = try await mock.fetch()
@@ -506,7 +623,7 @@ protocol DataRepository {
 Protocols with primary associated types (Swift 5.7+) are fully supported:
 
 ```swift
-@Mockable
+// swiftmockk:generate
 protocol Repository<Entity> {
     func fetch(id: String) async throws -> Entity
     func save(_ entity: Entity) async throws
@@ -523,7 +640,7 @@ protocol Repository<Entity> {
     let productRepo = MockRepository<Product>()
     let testProduct = Product(id: "p1", name: "Widget")
 
-    try await every { try await productRepo.fetch(id: "p1") }.returns(testProduct)
+    await every { try await productRepo.fetch(id: "p1") }.returns(testProduct)
 
     let result = try await productRepo.fetch(id: "p1")
     #expect(result == testProduct)
@@ -540,7 +657,7 @@ protocol Repository<Entity> {
 Traditional `associatedtype` declarations are automatically converted to generic parameters:
 
 ```swift
-@Mockable
+// swiftmockk:generate
 protocol Container {
     associatedtype Item
     func add(_ item: Item)
@@ -568,7 +685,7 @@ protocol Container {
 Protocols with multiple type parameters work seamlessly:
 
 ```swift
-@Mockable
+// swiftmockk:generate
 protocol Cache<Key, Value> where Key: Hashable {
     func get(_ key: Key) -> Value?
     func set(_ key: Key, value: Value)
@@ -589,7 +706,7 @@ protocol Cache<Key, Value> where Key: Hashable {
 Variadic generics with parameter packs are fully supported:
 
 ```swift
-@Mockable
+// swiftmockk:generate
 protocol VariadicProcessor {
     func process<each T>(_ values: repeat each T) -> (repeat each T)
 }
@@ -611,6 +728,8 @@ protocol VariadicProcessor {
 
 ## Current Limitations
 
+- **mockk() with stored property initializers**: Due to Swift's lazy evaluation, `mockk()` cannot be used as a stored property initializer without workarounds. See [Using mockk() with Stored Property Initializers](#important-using-mockk-with-stored-property-initializers) for solutions.
+- **Generic protocols and mockk()**: Generic protocols (those with associated types or type parameters) cannot use `mockk()` - use direct instantiation instead: `MockRepository<User>()`
 - **Typed throws methods must be stubbed**: Unstubbed typed throws methods will `fatalError()` instead of throwing `MockError.noStub` (see Typed Throws section above)
 - **Relaxed mocks**: Relaxed mode only works with primitive types (Int, String, Bool, etc.), not complex structs or Result types
 - **Spies**: Not yet implemented (cannot call through to real implementations)
