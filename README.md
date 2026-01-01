@@ -50,6 +50,14 @@ targets: [
 ]
 ```
 
+If using via Xcode:
+- In Xcode, select “File” → “Add Packages...”
+- Enter https://github.com/TheRogue76/SwiftMockk.git
+- Make sure to ONLY add the package to your test target, not the main target
+- Under the Test target's build settings -> Run build tools plugin, add the `SwiftMockkGeneratorPlugin` like so:
+
+<img width="1063" height="415" alt="Screenshot 2026-01-01 at 16 35 21" src="https://github.com/user-attachments/assets/2e1ad155-d687-4e7c-a546-61dbdd3f8488" />
+
 ## Usage
 
 ### 1. Mark Your Protocol
