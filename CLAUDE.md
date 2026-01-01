@@ -426,9 +426,67 @@ protocol UserService {
 
 **Why fatal error for missing stubs**: Swift's typed throws means a method can ONLY throw the specified error type. It cannot throw `MockError`. Therefore, typed throws methods MUST be stubbed before use.
 
+## Generics Support
+
+SwiftMockk provides comprehensive support for generics in protocols:
+
+### Generic Methods
+
+Methods with type parameters are fully supported, including complex constraints and where clauses:
+
+```swift
+@Mockable
+protocol Repository {
+    func fetch<T: Decodable>() async throws -> T
+    func process<T>(_ data: T) throws -> String where T: Codable & Sendable
+}
+
+let mock = MockRepository()
+await every { try await mock.fetch() as User }.returns(testUser)
+```
+
+### Generic Protocols
+
+Protocols with primary associated types (Swift 5.7+) or traditional associated types are supported:
+
+```swift
+// Primary associated types
+@Mockable
+protocol Repository<Entity> {
+    func fetch(id: String) async throws -> Entity
+    func save(_ entity: Entity) async throws
+}
+
+let userRepo = MockRepository<User>()
+await every { try await userRepo.fetch(id: "123") }.returns(testUser)
+```
+
+### Associated Types
+
+Traditional `associatedtype` declarations are automatically converted to generic parameters:
+
+```swift
+@Mockable
+protocol Container {
+    associatedtype Item
+    func add(_ item: Item)
+    func getAll() -> [Item]
+}
+
+let container = MockContainer<String>()
+await every { container.getAll() }.returns(["Hello", "World"])
+```
+
+### Generics Implementation Details
+
+- Generic parameters and where clauses are preserved from protocol to mock class
+- Multiple type parameters are supported
+- Complex constraints (protocol composition, inheritance) work correctly
+- Associated types with constraints are converted to generic parameters with where clauses
+
 ## Known Limitations
 
-1. **Generics**: Basic support, but complex generic constraints may not work
+1. **Generics**: Variadic generics (Swift 5.9+) are not yet supported
 2. **Relaxed mocks with complex types**: Relaxed mode only works with primitive types (Int, String, Bool, etc.), not complex structs or classes
 3. **Typed throws must be stubbed**: Unstubbed typed throws methods will `fatalError()` instead of throwing `MockError.noStub` (due to Swift's typed throws limitations)
 4. **Spies**: Not implemented (cannot call through to real implementations)

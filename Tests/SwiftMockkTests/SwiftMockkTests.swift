@@ -531,3 +531,139 @@ public protocol TypedThrowsService {
     #expect(users[0].name == "Alice")
     #expect(users[1].name == "Bob")
 }
+
+// MARK: - Generic Method Tests
+
+@Mockable
+protocol GenericRepository {
+    func fetch<T: Decodable>() async throws -> T
+    func save<T: Encodable>(_ item: T) async throws
+}
+
+@Test func testGenericMethodStubbing() async throws {
+    struct TestUser: Codable, Equatable {
+        let id: String
+        let name: String
+    }
+
+    let mock = MockGenericRepository()
+    let testUser = TestUser(id: "123", name: "Alice")
+
+    // Stub generic method with type inference
+    try await every { try await mock.fetch() as TestUser }.returns(testUser)
+
+    // Call with specific type
+    let result: TestUser = try await mock.fetch()
+
+    #expect(result == testUser)
+}
+
+@Test func testGenericMethodVerification() async throws {
+    struct Product: Codable, Equatable {
+        let name: String
+    }
+
+    let mock = MockGenericRepository()
+    let product = Product(name: "Widget")
+
+    // Stub the method
+    try await every { try await mock.save(product) }.returns(())
+
+    // Call it
+    try await mock.save(product)
+
+    // Verify it was called (use matcher for generic parameters)
+    try await verify { try await mock.save(any() as Product) }
+}
+
+@Test func testGenericMethodWithMatchers() async throws {
+    struct Item: Codable, Equatable {
+        let value: Int
+    }
+
+    let mock = MockGenericRepository()
+
+    // Stub with matcher
+    try await every { try await mock.save(any() as Item) }.returns(())
+
+    // Call with different item
+    try await mock.save(Item(value: 99))
+
+    // Verify with matcher
+    try await verify { try await mock.save(any() as Item) }
+}
+
+// MARK: - Generic Protocol Tests
+
+@Mockable
+protocol GenericUserRepository {
+    associatedtype User
+    func fetch(id: String) async throws -> User
+    func save(_ user: User) async throws
+}
+
+// Note: Primary associated type syntax <User> tested in macro expansion tests
+// Runtime tests use traditional associatedtype syntax for compatibility
+
+@Test func testGenericProtocolStubbing() async throws {
+    struct TestUser: Equatable {
+        let id: String
+        let name: String
+    }
+
+    let mock = MockGenericUserRepository<TestUser>()
+    let testUser = TestUser(id: "123", name: "Bob")
+
+    try await every { try await mock.fetch(id: "123") }.returns(testUser)
+
+    let result = try await mock.fetch(id: "123")
+    #expect(result == testUser)
+}
+
+@Test func testGenericProtocolWithDifferentTypes() async throws {
+    struct Product: Equatable {
+        let name: String
+    }
+
+    let productRepo = MockGenericUserRepository<Product>()
+    let testProduct = Product(name: "Widget")
+
+    try await every { try await productRepo.fetch(id: "p1") }.returns(testProduct)
+
+    let result = try await productRepo.fetch(id: "p1")
+    #expect(result.name == "Widget")
+}
+
+// MARK: - Associated Type Tests
+
+@Mockable
+protocol AssociatedTypeContainer {
+    associatedtype Item
+    func add(_ item: Item)
+    func getAll() -> [Item]
+}
+
+@Test func testAssociatedTypeStubbing() async throws {
+    let mock = MockAssociatedTypeContainer<String>()
+
+    await every { mock.getAll() }.returns(["Hello", "World"])
+
+    let result = mock.getAll()
+    #expect(result == ["Hello", "World"])
+}
+
+@Mockable
+protocol AssociatedTypeMapper {
+    associatedtype Input
+    associatedtype Output
+    func map(_ input: Input) -> Output
+}
+
+@Test func testAssociatedTypeMultiple() async throws {
+    let mock = MockAssociatedTypeMapper<Int, String>()
+
+    await every { mock.map(42) }.returns("42")
+
+    let result = mock.map(42)
+    #expect(result == "42")
+}

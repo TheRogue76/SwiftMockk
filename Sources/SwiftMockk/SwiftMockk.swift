@@ -40,23 +40,18 @@ private func _mockDummyValue<T>() throws -> T {
         return unsafeBitCast((), to: T.self)
     }
 
-    // Check if T is Result type - in relaxed mode, we can't create a safe dummy value
-    // But in stubbing/verifying mode, we need to return something (it won't be used)
-    let typeName = String(describing: T.self)
+    // For complex types (arrays, optionals, Result, etc.), check if we're in stubbing/verifying mode
     let mode = RecordingContext.shared.getCurrentMode()
-    if typeName.starts(with: "Result<") {
-        if mode == .stubbing || mode == .verifying {
-            // Return uninitialized memory - safe because value is never actually used in DSL
-            let size = MemoryLayout<T>.size
-            let alignment = MemoryLayout<T>.alignment
-            let ptr = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: alignment)
-            defer { ptr.deallocate() }
-            return ptr.load(as: T.self)
-        }
-        throw MockError.noStub("Cannot create dummy value for Result type in relaxed mode")
+    if mode == .stubbing || mode == .verifying {
+        // Return uninitialized memory - safe because value is never actually used in DSL
+        let size = MemoryLayout<T>.size
+        let alignment = MemoryLayout<T>.alignment
+        let ptr = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: alignment)
+        defer { ptr.deallocate() }
+        return ptr.load(as: T.self)
     }
 
-    // For other types, throw error - can't safely create dummy values
+    // In normal/relaxed mode, we can't safely create dummy values for complex types
     throw MockError.noStub("Cannot create dummy value for type \(T.self)")
 }
 
