@@ -108,10 +108,29 @@ public struct MockGenerator {
         }
         output += "}\n\n"
 
-        // Generate _autoRegister to trigger registration
+        // Generate _autoRegister to trigger registration (used by mock init())
         output += "private let _autoRegister: Void = {\n"
         output += "    _registerAllMocks()\n"
-        output += "}()\n"
+        output += "}()\n\n"
+
+        // Generate hook setup for mockk() support
+        // This hook is called by MockRegistry before the first lookup,
+        // solving the timing issue where mockk() is called before any mock is instantiated
+        output += "/// Registration hook for mockk() - ensures mocks are registered before lookup\n"
+        output += "private let _setupMockRegistrationHook: Void = {\n"
+        output += "    MockRegistry.shared.addRegistrationHook {\n"
+        output += "        _registerAllMocks()\n"
+        output += "    }\n"
+        output += "}()\n\n"
+
+
+        // Generate a public bootstrap function for explicit registration
+        output += "/// Call this to ensure all mocks are registered before using mockk().\n"
+        output += "/// Required when using mockk() in stored property initializers.\n"
+        output += "/// Example: Call in `override class func setUp()` for XCTest.\n"
+        output += "public func _swiftMockkBootstrap() {\n"
+        output += "    _ = _autoRegister\n"
+        output += "}\n"
 
         return output
     }
@@ -148,6 +167,8 @@ public struct MockGenerator {
         if !isGeneric {
             classDecl += "    // Auto-registration for mockk() support\n"
             classDecl += "    private static let _registerOnce: Void = {\n"
+            classDecl += "        // Ensure registration hook is set up for mockk() calls\n"
+            classDecl += "        _ = _setupMockRegistrationHook\n"
             classDecl += "        MockRegistry.shared.register(\(protocolName).self) { mode in\n"
             classDecl += "            \(mockClassName)(mode: mode)\n"
             classDecl += "        }\n"

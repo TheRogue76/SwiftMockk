@@ -120,6 +120,62 @@ let repo = MockRepository<User>()  // Works
 // mockk(Repository<User>.self)    // Won't work
 ```
 
+#### Important: Using mockk() with Stored Property Initializers
+
+Due to Swift's lazy evaluation of file-level constants, `mockk()` requires special handling when used as a stored property initializer (before any mock has been instantiated):
+
+```swift
+// ❌ This will crash - mockk() called before any mock is instantiated
+final class MyTests: XCTestCase {
+    let mock: UserService = mockk(UserService.self)  // Crashes!
+}
+```
+
+**Solutions:**
+
+**Option 1: Call `_swiftMockkBootstrap()` in class setUp (Recommended for XCTest)**
+```swift
+final class MyTests: XCTestCase {
+    var mock: UserService!  // Change to var
+
+    override class func setUp() {
+        super.setUp()
+        _swiftMockkBootstrap()  // Triggers mock registration
+    }
+
+    override func setUp() {
+        super.setUp()
+        mock = mockk(UserService.self)  // Now works!
+    }
+}
+```
+
+**Option 2: Use direct instantiation**
+```swift
+final class MyTests: XCTestCase {
+    let mock: UserService = MockUserService()  // Always works
+}
+```
+
+**Option 3: Use lazy var**
+```swift
+final class MyTests: XCTestCase {
+    lazy var mock: UserService = mockk(UserService.self)
+
+    override func setUp() {
+        super.setUp()
+        _ = mock  // Accessing lazy var triggers registration
+    }
+}
+```
+
+**Why this happens**: Swift evaluates file-level constants lazily. The mock registration code only runs when a mock is first instantiated. When `mockk()` is called as a stored property initializer, no mock has been instantiated yet, so the registry is empty.
+
+**When mockk() works without workarounds**:
+- When called inside test methods (after setUp has run)
+- When called after any mock has been directly instantiated
+- In Swift Testing `@Test` functions (they run after module initialization)
+
 ### 3. Stub Method Calls
 
 ```swift
@@ -672,6 +728,7 @@ protocol VariadicProcessor {
 
 ## Current Limitations
 
+- **mockk() with stored property initializers**: Due to Swift's lazy evaluation, `mockk()` cannot be used as a stored property initializer without workarounds. See [Using mockk() with Stored Property Initializers](#important-using-mockk-with-stored-property-initializers) for solutions.
 - **Generic protocols and mockk()**: Generic protocols (those with associated types or type parameters) cannot use `mockk()` - use direct instantiation instead: `MockRepository<User>()`
 - **Typed throws methods must be stubbed**: Unstubbed typed throws methods will `fatalError()` instead of throwing `MockError.noStub` (see Typed Throws section above)
 - **Relaxed mocks**: Relaxed mode only works with primitive types (Int, String, Bool, etc.), not complex structs or Result types

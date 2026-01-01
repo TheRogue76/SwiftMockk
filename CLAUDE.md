@@ -210,6 +210,46 @@ mockk(UserService.self)    --->   MockRegistry.create() returns mock
 - `mockk<T>(_ protocolType: T.Type, mode: MockMode = .strict) -> T` - fatalError on failure
 - `tryMockk<T>(_ protocolType: T.Type, mode: MockMode = .strict) throws -> T` - throws MockRegistryError
 
+**Important: mockk() Registration Timing**
+
+Due to Swift's lazy evaluation of file-level constants, `mockk()` has a timing limitation when used as a stored property initializer:
+
+```swift
+// ❌ This crashes - mockk() called before any mock is instantiated
+final class MyTests: XCTestCase {
+    let mock: UserService = mockk(UserService.self)  // Crashes!
+}
+```
+
+**Why this happens:**
+1. Generated code includes `_autoRegister` - a file-level constant that registers all mocks
+2. Swift evaluates file-level constants **lazily** on first access
+3. `_autoRegister` is only accessed from mock `init()` methods
+4. When `mockk()` is called as a stored property initializer, no mock has been instantiated yet
+5. Result: Registry is empty → `MockRegistryError.notRegistered` → crash
+
+**Solutions:**
+
+1. **Call `_swiftMockkBootstrap()` in class setUp** (Recommended for XCTest):
+   ```swift
+   override class func setUp() {
+       super.setUp()
+       _swiftMockkBootstrap()  // Triggers mock registration
+   }
+   ```
+
+2. **Use direct instantiation**: `let mock: UserService = MockUserService()`
+
+3. **Use lazy var**: `lazy var mock: UserService = mockk(UserService.self)`
+
+**When mockk() works without workarounds:**
+- When called inside test methods (after setUp has run)
+- When called after any mock has been directly instantiated
+- In Swift Testing `@Test` functions (they run after module initialization)
+
+**Generated bootstrap function:**
+The generator creates `_swiftMockkBootstrap()` function in `GeneratedMocks.swift` that users can call to trigger registration.
+
 ### Property Mocking
 
 Properties in protocols are fully supported. The generator creates:
@@ -490,12 +530,13 @@ await every { processor.process("Hello", 42, true) }.returns(("Hello", 42, true)
 
 ## Known Limitations
 
-1. **Generic protocols and mockk()**: Generic protocols (those with associated types or type parameters) cannot use `mockk()` - use direct instantiation instead: `MockRepository<User>()`
-2. **Relaxed mocks with complex types**: Relaxed mode only works with primitive types (Int, String, Bool, etc.), not complex structs or classes
-3. **Typed throws must be stubbed**: Unstubbed typed throws methods will `fatalError()` instead of throwing `MockError.noStub` (due to Swift's typed throws limitations)
-4. **Variadic generics argument recording**: Methods with parameter packs don't record individual arguments (due to type erasure limitations), but stubbing and verification by method name still work
-5. **Spies**: Not implemented (cannot call through to real implementations)
-6. **Classes**: Can only mock protocols, not concrete classes
+1. **mockk() with stored property initializers**: Due to Swift's lazy evaluation of file-level constants, `mockk()` cannot be used as a stored property initializer without workarounds. Solutions: call `_swiftMockkBootstrap()` in `override class func setUp()`, use direct instantiation (`MockProtocol()`), or use `lazy var`.
+2. **Generic protocols and mockk()**: Generic protocols (those with associated types or type parameters) cannot use `mockk()` - use direct instantiation instead: `MockRepository<User>()`
+3. **Relaxed mocks with complex types**: Relaxed mode only works with primitive types (Int, String, Bool, etc.), not complex structs or classes
+4. **Typed throws must be stubbed**: Unstubbed typed throws methods will `fatalError()` instead of throwing `MockError.noStub` (due to Swift's typed throws limitations)
+5. **Variadic generics argument recording**: Methods with parameter packs don't record individual arguments (due to type erasure limitations), but stubbing and verification by method name still work
+6. **Spies**: Not implemented (cannot call through to real implementations)
+7. **Classes**: Can only mock protocols, not concrete classes
 
 ## Debugging Tips
 
