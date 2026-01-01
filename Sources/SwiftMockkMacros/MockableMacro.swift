@@ -75,7 +75,7 @@ public struct MockableMacro: PeerMacro {
         }
 
         // Generate the mock class using string literal approach for complex generic syntax
-        let mockClass = try! ClassDeclSyntax("\(raw: classDeclaration)") {
+        let mockClass = try ClassDeclSyntax("\(raw: classDeclaration)") {
             // Add internal infrastructure
             DeclSyntax("public let _mockId = UUID().uuidString")
             DeclSyntax("public var _recorder: CallRecorder { CallRecorder.shared(for: _mockId) }")
@@ -259,7 +259,11 @@ public struct MockableMacro: PeerMacro {
             if isAsync && isThrowing {
                 // Async throwing method
                 if hasTypedThrows {
-                    methodBody += "\n    return try await _mockGetTypedAsyncStub(for: call, mockMode: _mockMode, errorType: \(errorTypeName).self)"
+                    methodBody += """
+
+                        return try await _mockGetTypedAsyncStub(
+                            for: call, mockMode: _mockMode, errorType: \(errorTypeName).self)
+                    """
                 } else {
                     methodBody += "\n    return try await _mockGetAsyncStub(for: call, mockMode: _mockMode)"
                 }
@@ -269,7 +273,11 @@ public struct MockableMacro: PeerMacro {
             } else if isThrowing {
                 // Sync throwing method
                 if hasTypedThrows {
-                    methodBody += "\n    return try _mockGetTypedStub(for: call, mockMode: _mockMode, errorType: \(errorTypeName).self)"
+                    methodBody += """
+
+                        return try _mockGetTypedStub(
+                            for: call, mockMode: _mockMode, errorType: \(errorTypeName).self)
+                    """
                 } else {
                     methodBody += "\n    return try _mockGetStub(for: call, mockMode: _mockMode)"
                 }
@@ -335,6 +343,7 @@ public struct MockableMacro: PeerMacro {
 
             // Generate the property with getter and optionally setter
             if isGetSet {
+                // swiftlint:disable:next line_length
                 let property = DeclSyntax(stringLiteral: """
                 public var \(propertyName): \(propertyType) {
                     get {
@@ -359,6 +368,7 @@ public struct MockableMacro: PeerMacro {
                 properties.append(property)
             } else {
                 // Get-only property
+                // swiftlint:disable:next line_length
                 let property = DeclSyntax(stringLiteral: """
                 public var \(propertyName): \(propertyType) {
                     get {

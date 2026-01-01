@@ -325,7 +325,7 @@ protocol ServiceWithProperties {
 
     // Verify order (non-consecutive)
     try await verifyOrder {
-        let _ = try await mock.fetchUser(id: any())
+        _ = try await mock.fetchUser(id: any())
         try await mock.deleteUser(id: any())
     }
 }
@@ -343,7 +343,7 @@ protocol ServiceWithProperties {
 
     // Verify exact consecutive sequence
     try await verifySequence {
-        let _ = try await mock.fetchUser(id: "1")
+        _ = try await mock.fetchUser(id: "1")
         try await mock.deleteUser(id: "1")
     }
 }

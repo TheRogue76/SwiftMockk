@@ -5,7 +5,7 @@ import Testing
 @testable import SwiftMockkMacros
 
 let testMacros: [String: Macro.Type] = [
-    "Mockable": MockableMacro.self,
+    "Mockable": MockableMacro.self
 ]
 
 // MARK: - Basic Protocol Tests
